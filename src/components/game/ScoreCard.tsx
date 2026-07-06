@@ -3,6 +3,9 @@
 interface ScoreCardProps {
   score: number;
   percentile?: number | null;
+  rank?: number | null;
+  summary?: string | null;
+  saved?: boolean;
   isPractice?: boolean;
   onShare?: () => void;
   onPlayAgain?: () => void;
@@ -11,6 +14,9 @@ interface ScoreCardProps {
 export function ScoreCard({
   score,
   percentile,
+  rank,
+  summary,
+  saved = false,
   isPractice,
   onShare,
   onPlayAgain,
@@ -29,11 +35,19 @@ export function ScoreCard({
         </p>
       </div>
 
-      {percentile != null && !isPractice && (
+      {summary && !isPractice && (
+        <div className="card rounded-sm px-4 py-3 text-center w-full">
+          <p className="text-xs text-[var(--fg-muted)] leading-relaxed">
+            {summary}
+          </p>
+        </div>
+      )}
+
+      {saved && percentile != null && !isPractice && (
         <div className="card rounded-sm px-5 py-3 text-center w-full">
-          <p className="section-label">Today&apos;s rank</p>
+          <p className="section-label">Saved to leaderboard</p>
           <p className="font-mono text-2xl text-[var(--fg)] mt-1">
-            Top {percentile}%
+            {rank != null ? `#${rank}` : "—"} · Top {percentile}%
           </p>
         </div>
       )}
@@ -50,7 +64,7 @@ export function ScoreCard({
             {isPractice ? "Try again" : "Home"}
           </button>
         )}
-        {onShare && !isPractice && (
+        {onShare && saved && !isPractice && (
           <button onClick={onShare} className="btn-primary flex-1 py-2.5">
             Share
           </button>

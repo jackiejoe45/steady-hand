@@ -12,7 +12,8 @@ function generateId() {
   return crypto.randomUUID();
 }
 
-export async function getOrCreateDailyAngle(dateStr?: string) {
+/** Read today's angle from DB — does not create */
+export async function getDailyAngle(dateStr?: string) {
   const database = requireDb();
   const date = dateStr ?? getUtcTodayDateStr();
   const [existing] = await database
@@ -21,15 +22,92 @@ export async function getOrCreateDailyAngle(dateStr?: string) {
     .where(eq(schema.dailyAngles.date, date))
     .limit(1);
 
+  return existing ?? null;
+}
+
+/** Create today's angle on first play; safe under concurrent requests */
+export async function getOrCreateDailyAngle(dateStr?: string) {
+  const database = requireDb();
+  const date = dateStr ?? getUtcTodayDateStr();
+
+  const existing = await getDailyAngle(date);
   if (existing) return existing;
 
   const { angle, axis } = computeDailyAngle(date);
-  await database.insert(schema.dailyAngles).values({
-    date,
-    angleDegrees: angle,
-    axis,
-  });
-  return { date, angleDegrees: angle, axis };
+  await database
+    .insert(schema.dailyAngles)
+    .values({
+      date,
+      angleDegrees: angle,
+      axis,
+    })
+    .onConflictDoNothing();
+
+  const created = await getDailyAngle(date);
+  if (created) return created;
+
+  throw new Error("Failed to create daily angle");
+}
+
+export function buildPerformanceSummary(params: {
+  scoreMad: number;
+  percentile: number;
+  rank: number | null;
+  playerCount: number;
+  saved: boolean;
+}): string {
+  const { scoreMad, percentile, rank, playerCount, saved } = params;
+  const score = scoreMad.toFixed(2);
+
+  if (saved && rank != null) {
+    return `Ranked #${rank} today — top ${percentile}% with ${score}° MAD`;
+  }
+
+  if (playerCount === 0) {
+    return `${score}° — you'd be first on today's board. Sign in to save your score.`;
+  }
+
+  if (rank === 1) {
+    return `${score}° — you'd rank #1 among ${playerCount} players today. Sign in to claim it.`;
+  }
+
+  return `${score}° — better than ${percentile}% of today's ${playerCount} players. Sign in to save your score.`;
+}
+
+/** Compare a score against today's leaderboard without persisting */
+export async function compareScoreToDaily(scoreMad: number, dateStr?: string) {
+  const date = dateStr ?? getUtcTodayDateStr();
+  const leaderboard = await getDailyLeaderboard(date);
+  const scores = leaderboard.map((e) => e.scoreMad);
+  const percentile = computePercentileRank(scoreMad, scores);
+
+  const rankAmong =
+    scores.length === 0
+      ? 1
+      : scores.filter((s) => s < scoreMad).length + 1;
+
+  const avgScore =
+    scores.length > 0
+      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) /
+        100
+      : null;
+
+  const bestScore = scores.length > 0 ? Math.min(...scores) : null;
+
+  return {
+    percentile,
+    rank: rankAmong,
+    playerCount: scores.length,
+    avgScore,
+    bestScore,
+    summary: buildPerformanceSummary({
+      scoreMad,
+      percentile,
+      rank: rankAmong,
+      playerCount: scores.length,
+      saved: false,
+    }),
+  };
 }
 
 export async function getDailyLeaderboard(dateStr?: string) {
@@ -183,10 +261,21 @@ export async function submitAttempt(params: {
   const leaderboard = await getDailyLeaderboard(params.date);
   const entry = leaderboard.find((e) => e.userId === params.userId);
 
+  const percentile = entry?.percentile ?? null;
+  const rank = entry?.rank ?? null;
+
   return {
     attemptId: id,
-    percentile: entry?.percentile ?? null,
-    rank: entry?.rank ?? null,
+    percentile,
+    rank,
+    saved: true,
+    summary: buildPerformanceSummary({
+      scoreMad: params.scoreMad,
+      percentile: percentile ?? 100,
+      rank,
+      playerCount: leaderboard.length,
+      saved: true,
+    }),
   };
 }
 
@@ -209,7 +298,6 @@ async function updateProfileAfterAttempt(
       ? scoreMad
       : Math.min(profile.personalBestMad, scoreMad);
 
-  // Streak: check if yesterday had an attempt
   const yesterday = new Date(`${date}T00:00:00Z`);
   yesterday.setUTCDate(yesterday.getUTCDate() - 1);
   const yesterdayStr = yesterday.toISOString().slice(0, 10);

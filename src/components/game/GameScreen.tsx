@@ -36,10 +36,18 @@ export function GameScreen() {
   const { data: session } = useSession();
 
   const [dailyAngle, setDailyAngle] = useState<DailyAngle | null>(null);
+  const [todayDate, setTodayDate] = useState(getUtcTodayDateStr());
+  const [dailyReady, setDailyReady] = useState(isPractice);
   const [practiceChallenge, setPracticeChallenge] =
     useState<PracticeChallenge | null>(null);
   const [percentile, setPercentile] = useState<number | null>(null);
+  const [rank, setRank] = useState<number | null>(null);
+  const [performanceSummary, setPerformanceSummary] = useState<string | null>(
+    null,
+  );
+  const [scoreSaved, setScoreSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const {
     sample,
@@ -62,6 +70,10 @@ export function GameScreen() {
       if (isPractice) return;
 
       setSubmitting(true);
+      setPerformanceSummary(null);
+      setScoreSaved(false);
+      setPercentile(null);
+      setRank(null);
       try {
         const res = await fetch("/api/attempts", {
           method: "POST",
@@ -73,9 +85,14 @@ export function GameScreen() {
           }),
         });
         const data = await res.json();
-        if (data.percentile) setPercentile(data.percentile);
+        if (data.percentile != null) setPercentile(data.percentile);
+        if (data.rank != null) setRank(data.rank);
+        if (data.summary) setPerformanceSummary(data.summary);
+        setScoreSaved(Boolean(data.saved));
       } catch {
-        // Offline or unauthenticated
+        setPerformanceSummary(
+          "Couldn't compare your score right now. Check the leaderboard.",
+        );
       } finally {
         setSubmitting(false);
       }
@@ -112,15 +129,30 @@ export function GameScreen() {
   });
 
   useEffect(() => {
+    if (isPractice) return;
+
     fetch("/api/daily-angle")
       .then((r) => r.json())
-      .then(setDailyAngle)
-      .catch(() => {
-        const date = getUtcTodayDateStr();
-        const { angle, axis } = computeDailyAngle(date);
-        setDailyAngle({ date, angleDegrees: angle, axis });
-      });
-  }, []);
+      .then(
+        (data: {
+          date: string;
+          exists?: boolean;
+          angleDegrees?: number;
+          axis?: Axis;
+        }) => {
+          setTodayDate(data.date);
+          if (data.exists && data.angleDegrees != null && data.axis) {
+            setDailyAngle({
+              date: data.date,
+              angleDegrees: data.angleDegrees,
+              axis: data.axis,
+            });
+          }
+          setDailyReady(true);
+        },
+      )
+      .catch(() => setDailyReady(true));
+  }, [isPractice]);
 
   const rollPracticeChallenge = useCallback((): PracticeChallenge => {
     const date = getUtcTodayDateStr();
@@ -152,7 +184,26 @@ export function GameScreen() {
         axis: challenge.axis,
       });
     } else {
-      engine.start();
+      setStarting(true);
+      try {
+        const res = await fetch("/api/daily-angle", { method: "POST" });
+        const data = await res.json();
+        const angle: DailyAngle = {
+          date: data.date,
+          angleDegrees: data.angleDegrees,
+          axis: data.axis,
+        };
+        setDailyAngle(angle);
+        setTodayDate(data.date);
+        engine.start({
+          targetAngle: angle.angleDegrees,
+          axis: angle.axis,
+        });
+      } catch {
+        return;
+      } finally {
+        setStarting(false);
+      }
     }
     trackEvent("game_start", { isPractice });
   };
@@ -167,7 +218,7 @@ export function GameScreen() {
     trackEvent("share_card", { score: engine.score });
   };
 
-  if (!isPractice && !dailyAngle) {
+  if (!isPractice && !dailyReady) {
     return (
       <div className="flex h-full items-center justify-center">
         <p className="section-label animate-pulse-glow">Loading</p>
@@ -192,18 +243,18 @@ export function GameScreen() {
             subtitle={headerSubtitle}
             compact
           />
-          {!isPractice && dailyAngle && engine.phase === "idle" && (
+          {!isPractice && engine.phase === "idle" && (
             <div className="mt-3 flex justify-center gap-3">
               <div className="card rounded-sm px-3 py-2 text-center">
                 <p className="section-label">Date</p>
                 <p className="font-mono text-xs text-[var(--fg-muted)] mt-0.5">
-                  {dailyAngle.date}
+                  {todayDate}
                 </p>
               </div>
               <div className="card rounded-sm px-3 py-2 text-center">
-                <p className="section-label">Axis</p>
+                <p className="section-label">Status</p>
                 <p className="font-mono text-xs text-[var(--accent-teal)] mt-0.5 capitalize">
-                  {dailyAngle.axis}
+                  {dailyAngle ? dailyAngle.axis : "Locked"}
                 </p>
               </div>
             </div>
@@ -214,17 +265,25 @@ export function GameScreen() {
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
         {engine.phase === "idle" && (
           <div className="flex flex-col items-center gap-4 text-center animate-fade-up">
-            {!isPractice && dailyAngle && (
+            {!isPractice && dailyAngle ? (
               <TiltMotionGuide mode="intro" axis={dailyAngle.axis} compact />
-            )}
+            ) : !isPractice ? (
+              <p className="text-xs text-[var(--fg-muted)] max-w-[14rem]">
+                Start to unlock today&apos;s angle for everyone
+              </p>
+            ) : null}
             {isPractice && (
               <p className="section-label">Random challenge</p>
             )}
             <span className="font-serif text-6xl text-[var(--fg-subtle)]">
               ??°
             </span>
-            <button onClick={handleStart} className="btn-primary px-10 py-3.5">
-              Start
+            <button
+              onClick={handleStart}
+              disabled={starting}
+              className="btn-primary px-10 py-3.5 disabled:opacity-50"
+            >
+              {starting ? "Loading..." : "Start"}
             </button>
           </div>
         )}
@@ -294,8 +353,11 @@ export function GameScreen() {
             <ScoreCard
               score={engine.score ?? 0}
               percentile={percentile}
+              rank={rank}
+              summary={performanceSummary}
+              saved={scoreSaved}
               isPractice={isPractice}
-              onShare={!isPractice ? handleShare : undefined}
+              onShare={scoreSaved && !isPractice ? handleShare : undefined}
               onPlayAgain={() => {
                 if (isPractice) {
                   rollPracticeChallenge();
@@ -305,7 +367,15 @@ export function GameScreen() {
                 }
               }}
             />
-            {!isPractice && engine.score != null && dailyAngle && (
+            {!isPractice && !scoreSaved && (
+              <Link
+                href="/leaderboard"
+                className="text-xs text-[var(--accent-teal)] hover:underline"
+              >
+                View today&apos;s leaderboard
+              </Link>
+            )}
+            {!isPractice && engine.score != null && scoreSaved && dailyAngle && (
               <ShareCard
                 score={engine.score}
                 percentile={percentile}

@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { getUtcTodayDateStr } from "@/lib/game/daily-angle";
 import {
   computeWeightedMAD,
@@ -9,7 +9,11 @@ import {
   downsample,
   isPortraitValid,
 } from "@/lib/game/scoring";
-import { getOrCreateDailyAngle, submitAttempt } from "@/server/queries";
+import {
+  compareScoreToDaily,
+  getOrCreateDailyAngle,
+  submitAttempt,
+} from "@/server/queries";
 import type { Axis, TiltSample } from "@/lib/game/constants";
 
 const attemptSchema = z.object({
@@ -26,7 +30,7 @@ const attemptSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const session = await requireSession(await headers());
+    const session = await getSession(await headers());
     const body = await request.json();
     const parsed = attemptSchema.parse(body);
 
@@ -36,7 +40,6 @@ export async function POST(request: Request) {
     const downsampled = downsample(parsed.samples as TiltSample[]);
     const axis = dailyAngle.axis as Axis;
 
-    // Validate portrait orientation throughout hold
     const portraitInvalid = downsampled.some(
       (s) => !isPortraitValid(s.pitch),
     );
@@ -49,36 +52,53 @@ export async function POST(request: Request) {
 
     const valid = !portraitInvalid && !tremorFlag;
 
-    if (!parsed.isPractice) {
-      const result = await submitAttempt({
-        userId: session.user.id,
-        date,
-        scoreMad,
-        samples: downsampled,
-        deviceModel: parsed.deviceModel,
-        isPractice: false,
-        valid,
-        tremorFlag,
-      });
-
+    if (parsed.isPractice) {
       return NextResponse.json({
         scoreMad,
         valid,
         tremorFlag,
-        ...result,
+        isPractice: true,
+        saved: false,
       });
     }
+
+    if (!session) {
+      const comparison = await compareScoreToDaily(scoreMad, date);
+      return NextResponse.json({
+        scoreMad,
+        valid,
+        tremorFlag,
+        saved: false,
+        ...comparison,
+      });
+    }
+
+    const result = await submitAttempt({
+      userId: session.user.id,
+      date,
+      scoreMad,
+      samples: downsampled,
+      deviceModel: parsed.deviceModel,
+      isPractice: false,
+      valid,
+      tremorFlag,
+    });
 
     return NextResponse.json({
       scoreMad,
       valid,
       tremorFlag,
-      isPractice: true,
+      ...result,
     });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Submission failed";
-    const status = message === "Unauthorized" ? 401 : 400;
+    const status =
+      message === "Already submitted today's attempt"
+        ? 409
+        : message === "Unauthorized"
+          ? 401
+          : 400;
     return NextResponse.json({ error: message }, { status });
   }
 }

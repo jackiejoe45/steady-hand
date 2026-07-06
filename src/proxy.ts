@@ -7,7 +7,6 @@ export async function proxy(request: NextRequest) {
   if (
     !sessionCookie &&
     (request.nextUrl.pathname.startsWith("/profile") ||
-      request.nextUrl.pathname.startsWith("/api/attempts") ||
       request.nextUrl.pathname.startsWith("/api/profile") ||
       request.nextUrl.pathname.startsWith("/api/friends") ||
       request.nextUrl.pathname.startsWith("/api/push"))
@@ -24,7 +23,6 @@ export async function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     "/profile/:path*",
-    "/api/attempts/:path*",
     "/api/profile/:path*",
     "/api/friends/:path*",
     "/api/push/:path*",

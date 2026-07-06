@@ -4,7 +4,6 @@ import {
   getAllTimeLeaderboard,
   getDailyLeaderboard,
   getFriendLeaderboard,
-  getOrCreateDailyAngle,
   getWeeklyLeaderboard,
 } from "@/server/queries";
 
@@ -33,14 +32,5 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Leaderboard fetch failed:", error);
     return NextResponse.json([], { status: 200 });
-  }
-}
-
-export async function POST() {
-  try {
-    const angle = await getOrCreateDailyAngle();
-    return NextResponse.json(angle);
-  } catch {
-    return NextResponse.json({ error: "Failed to get daily angle" }, { status: 500 });
   }
 }

@@ -1,0 +1,18 @@
+{
+  "name": "SteadyHand",
+  "short_name": "SteadyHand",
+  "description": "One angle. One shot. Steady wins.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

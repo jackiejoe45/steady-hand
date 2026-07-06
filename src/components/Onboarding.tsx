@@ -13,16 +13,19 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   const steps = [
     {
-      title: "Welcome to SteadyHand",
+      index: "01 / Welcome",
+      title: "SteadyHand",
       body: "Tilt your phone to a secret angle and hold perfectly still. One attempt per day.",
     },
     {
-      title: "How it works",
+      index: "02 / How it works",
+      title: "Shake, memorize, hold",
       body: "Move your phone to unlock the angle, memorize it, then hold steady for 10 seconds.",
     },
     {
-      title: "Motion sensors",
-      body: "We need access to your device motion sensors to measure your steadiness.",
+      index: "03 / Sensors",
+      title: "Motion access",
+      body: "We need your device motion sensors to measure your steadiness.",
     },
   ];
 
@@ -43,27 +46,34 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     }
   }, [onComplete]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a0a0f]/95 backdrop-blur-sm p-6">
-      <div className="max-w-sm w-full rounded-2xl bg-zinc-900 border border-zinc-800 p-8 text-center space-y-6">
-        <h2 className="text-xl font-bold">{steps[step]?.title}</h2>
-        <p className="text-zinc-400 text-sm">{steps[step]?.body}</p>
+  const current = steps[step];
 
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)]/98 p-6">
+      <div className="card max-w-sm w-full rounded-sm p-7 text-center space-y-5 animate-fade-up">
+        <p className="section-label">{current?.index}</p>
+        <h2 className="font-serif text-3xl text-[var(--fg)]">{current?.title}</h2>
+        <p className="text-[var(--fg-muted)] text-sm leading-relaxed">
+          {current?.body}
+        </p>
+
+        {error && (
+          <p className="text-[var(--danger)] text-xs">{error}</p>
+        )}
 
         {step < 2 ? (
           <button
             onClick={() => setStep(step + 1)}
-            className="w-full rounded-xl bg-[#4FC3F7] text-black py-3 font-medium"
+            className="btn-primary w-full py-3"
           >
-            Next
+            Continue
           </button>
         ) : (
           <button
             onClick={() => void handleMotionPermission()}
-            className="w-full rounded-xl bg-[#4FC3F7] text-black py-3 font-medium"
+            className="btn-primary w-full py-3"
           >
-            Enable Motion Sensors
+            Enable motion sensors
           </button>
         )}
       </div>

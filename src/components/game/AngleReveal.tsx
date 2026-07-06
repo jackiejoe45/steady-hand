@@ -9,14 +9,15 @@ interface AngleRevealProps {
 
 export function AngleReveal({ angle, axis }: AngleRevealProps) {
   return (
-    <div className="flex flex-col items-center gap-4 animate-pulse">
-      <p className="text-zinc-500 uppercase tracking-widest text-sm">
-        Target {axis}
-      </p>
-      <span className="font-mono text-8xl font-bold text-[#4FC3F7]">
+    <div className="flex flex-col items-center gap-3 animate-fade-up">
+      <p className="section-label">03 / Memorize</p>
+      <p className="text-[var(--fg-muted)] text-xs capitalize">{axis} target</p>
+      <span className="font-serif text-7xl text-[var(--accent-teal)]">
         {Math.round(angle)}°
       </span>
-      <p className="text-zinc-500 text-sm">Memorize this angle</p>
+      <p className="text-[var(--fg-subtle)] text-xs italic">
+        Lock it in before you tilt
+      </p>
     </div>
   );
 }

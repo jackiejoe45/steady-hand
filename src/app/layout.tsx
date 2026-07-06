@@ -1,13 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, Instrument_Serif, JetBrains_Mono } from "next/font/google";
 import { AnalyticsProvider } from "@/lib/analytics";
 import { AppShell } from "@/components/AppShell";
+import { DesktopGate } from "@/components/DesktopGate";
 import { NavBar } from "@/components/NavBar";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
   subsets: ["latin"],
+});
+
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -31,11 +38,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0f",
+  themeColor: "#0b0b0a",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -46,14 +54,18 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${jetbrainsMono.variable} h-full`}
+      className={`${dmSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col bg-[#0a0a0f] text-white">
+      <body className="h-full bg-[var(--bg)] text-[var(--fg)]">
         <AnalyticsProvider>
-          <AppShell>
-            <main className="flex-1">{children}</main>
-          </AppShell>
-          <NavBar />
+          <DesktopGate>
+            <div className="mobile-shell">
+              <AppShell>
+                <main className="mobile-main">{children}</main>
+              </AppShell>
+              <NavBar />
+            </div>
+          </DesktopGate>
         </AnalyticsProvider>
       </body>
     </html>

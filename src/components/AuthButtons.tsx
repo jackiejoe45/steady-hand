@@ -53,9 +53,7 @@ export function AuthButtons({
           setAppleEnabled(Boolean(data.apple));
         }
       })
-      .catch(() => {
-        // Keep OAuth hidden if config can't be loaded
-      });
+      .catch(() => {});
   }, [googleEnabledProp, appleEnabledProp]);
 
   const handleEmailAuth = async (e: FormEvent) => {
@@ -99,15 +97,15 @@ export function AuthButtons({
     const showOAuth = googleEnabled || appleEnabled;
 
     return (
-      <div className="flex flex-col gap-4 w-full max-w-xs">
-        <form onSubmit={handleEmailAuth} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        <form onSubmit={handleEmailAuth} className="flex flex-col gap-2.5">
           {mode === "sign-up" && (
             <input
               type="text"
               placeholder="Display name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#4FC3F7]"
+              className="input-field w-full rounded-sm px-4 py-2.5 text-sm"
               autoComplete="name"
             />
           )}
@@ -117,7 +115,7 @@ export function AuthButtons({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#4FC3F7]"
+            className="input-field w-full rounded-sm px-4 py-2.5 text-sm"
             autoComplete="email"
           />
           <input
@@ -127,18 +125,18 @@ export function AuthButtons({
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={8}
-            className="w-full rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 text-white placeholder:text-zinc-500 focus:outline-none focus:border-[#4FC3F7]"
+            className="input-field w-full rounded-sm px-4 py-2.5 text-sm"
             autoComplete={
               mode === "sign-up" ? "new-password" : "current-password"
             }
           />
           {error && (
-            <p className="text-red-400 text-sm text-center">{error}</p>
+            <p className="text-[var(--danger)] text-xs text-center">{error}</p>
           )}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-[#4FC3F7] hover:bg-[#29B6F6] disabled:opacity-50 text-black py-3 font-medium transition-colors"
+            className="btn-primary w-full py-2.5 disabled:opacity-50"
           >
             {loading
               ? "Please wait..."
@@ -154,7 +152,7 @@ export function AuthButtons({
             setMode(mode === "sign-in" ? "sign-up" : "sign-in");
             setError("");
           }}
-          className="text-sm text-zinc-500 hover:text-zinc-300"
+          className="text-xs text-[var(--fg-subtle)] hover:text-[var(--fg-muted)]"
         >
           {mode === "sign-in"
             ? "Need an account? Sign up"
@@ -163,21 +161,14 @@ export function AuthButtons({
 
         {showOAuth && (
           <>
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-zinc-800" />
-              <span className="text-xs text-zinc-500 uppercase tracking-wide">
-                or
-              </span>
-              <div className="h-px flex-1 bg-zinc-800" />
-            </div>
-
+            <div className="editorial-rule" />
             {googleEnabled && (
               <button
                 type="button"
                 onClick={() =>
                   signIn.social({ provider: "google", callbackURL: "/" })
                 }
-                className="w-full rounded-xl bg-white text-black py-3 font-medium hover:bg-zinc-100 transition-colors"
+                className="btn-secondary w-full py-2.5"
               >
                 Continue with Google
               </button>
@@ -188,7 +179,7 @@ export function AuthButtons({
                 onClick={() =>
                   signIn.social({ provider: "apple", callbackURL: "/" })
                 }
-                className="w-full rounded-xl bg-zinc-800 text-white py-3 font-medium hover:bg-zinc-700 transition-colors border border-zinc-700"
+                className="btn-secondary w-full py-2.5"
               >
                 Continue with Apple
               </button>
@@ -200,22 +191,22 @@ export function AuthButtons({
   }
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3 text-xs">
       {deferredPrompt && (
         <button
           onClick={async () => {
             await deferredPrompt.prompt();
             setDeferredPrompt(null);
           }}
-          className="text-xs text-[#4FC3F7] underline"
+          className="text-[var(--accent-teal)] underline"
         >
-          Install App
+          Install app
         </button>
       )}
-      <span className="text-sm text-zinc-400">{session.user.name}</span>
+      <span className="text-[var(--fg-muted)]">{session.user.name}</span>
       <button
         onClick={() => signOut()}
-        className="text-xs text-zinc-500 hover:text-zinc-300"
+        className="text-[var(--fg-subtle)] hover:text-[var(--fg-muted)]"
       >
         Sign out
       </button>

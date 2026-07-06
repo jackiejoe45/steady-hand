@@ -5,14 +5,14 @@ interface ShakeGateProps {
 }
 
 export function ShakeGate({ progress }: ShakeGateProps) {
-  const size = 200;
-  const stroke = 8;
+  const size = 160;
+  const stroke = 6;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - progress);
 
   return (
-    <div className="flex flex-col items-center gap-6">
+    <div className="flex flex-col items-center gap-4">
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
           <circle
@@ -20,7 +20,7 @@ export function ShakeGate({ progress }: ShakeGateProps) {
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke="#1a1a2e"
+            stroke="var(--border)"
             strokeWidth={stroke}
           />
           <circle
@@ -28,7 +28,7 @@ export function ShakeGate({ progress }: ShakeGateProps) {
             cy={size / 2}
             r={radius}
             fill="none"
-            stroke="#4FC3F7"
+            stroke="var(--accent-teal)"
             strokeWidth={stroke}
             strokeDasharray={circumference}
             strokeDashoffset={offset}
@@ -37,12 +37,12 @@ export function ShakeGate({ progress }: ShakeGateProps) {
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="font-mono text-2xl text-[#4FC3F7]">
+          <span className="font-mono text-xl text-[var(--accent-teal)]">
             {Math.round(progress * 100)}%
           </span>
         </div>
       </div>
-      <p className="text-center text-zinc-400 max-w-xs">
+      <p className="text-center text-[var(--fg-muted)] text-xs max-w-[14rem] leading-relaxed">
         Move your phone continuously to confirm you&apos;re holding it
       </p>
     </div>

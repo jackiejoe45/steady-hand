@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { useSession } from "@/lib/auth-client";
 
 type Tab = "daily" | "weekly" | "alltime" | "friends";
@@ -37,7 +38,9 @@ function LeaderboardContent() {
         const data = await r.json();
         if (!r.ok) {
           throw new Error(
-            typeof data?.error === "string" ? data.error : "Failed to load leaderboard",
+            typeof data?.error === "string"
+              ? data.error
+              : "Failed to load leaderboard",
           );
         }
         if (!Array.isArray(data)) {
@@ -61,18 +64,18 @@ function LeaderboardContent() {
   ];
 
   return (
-    <div className="px-4 pb-24 pt-8 max-w-lg mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Leaderboard</h1>
+    <div className="h-full overflow-y-auto px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-4 max-w-lg mx-auto">
+      <PageHeader index="02 / Rankings" title="Leaderboard" compact />
 
-      <div className="flex gap-2 mb-6 overflow-x-auto">
+      <div className="flex gap-1.5 mt-5 mb-4 overflow-x-auto">
         {tabs.map(({ id, label }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+            className={`px-3 py-1.5 text-[0.65rem] tracking-[0.12em] uppercase whitespace-nowrap border transition-colors ${
               tab === id
-                ? "bg-[#4FC3F7] text-black"
-                : "bg-zinc-800 text-zinc-400 hover:text-white"
+                ? "border-[var(--accent-teal)] text-[var(--accent-teal)] bg-[var(--bg-soft)]"
+                : "border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg-muted)]"
             }`}
           >
             {label}
@@ -81,32 +84,32 @@ function LeaderboardContent() {
       </div>
 
       {loading ? (
-        <p className="text-zinc-500 text-center font-mono animate-pulse">
-          Loading...
-        </p>
+        <p className="section-label text-center animate-pulse-glow">Loading</p>
       ) : error ? (
-        <p className="text-zinc-500 text-center">{error}</p>
+        <p className="text-[var(--fg-muted)] text-sm text-center">{error}</p>
       ) : entries.length === 0 ? (
-        <p className="text-zinc-500 text-center">
+        <p className="text-[var(--fg-muted)] text-sm text-center">
           {tab === "friends" && !session
             ? "Sign in to see your friend leaderboard"
             : "No scores yet"}
         </p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {entries.slice(0, 100).map((entry, i) => (
             <div
               key={entry.userId + i}
-              className="flex items-center gap-3 rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3"
+              className="card flex items-center gap-3 rounded-sm px-3 py-2.5"
             >
-              <span className="font-mono text-zinc-500 w-8">#{entry.rank}</span>
+              <span className="font-mono text-xs text-[var(--fg-subtle)] w-7">
+                #{entry.rank}
+              </span>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{entry.displayName}</p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-sm truncate">{entry.displayName}</p>
+                <p className="text-[0.65rem] text-[var(--fg-subtle)]">
                   Top {entry.percentile}%
                 </p>
               </div>
-              <span className="font-mono text-[#4FC3F7]">
+              <span className="font-mono text-sm text-[var(--accent-teal)]">
                 {tab === "alltime"
                   ? `${entry.gold ?? 0}🥇 ${entry.silver ?? 0}🥈`
                   : `${(entry.scoreMad ?? entry.avgScore ?? 0).toFixed(2)}°`}
@@ -121,7 +124,13 @@ function LeaderboardContent() {
 
 export default function LeaderboardPage() {
   return (
-    <Suspense fallback={<div className="text-center pt-8 text-zinc-500">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex h-full items-center justify-center">
+          <p className="section-label animate-pulse-glow">Loading</p>
+        </div>
+      }
+    >
       <LeaderboardContent />
     </Suspense>
   );

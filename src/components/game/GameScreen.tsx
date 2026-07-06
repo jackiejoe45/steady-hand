@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AngleReveal } from "@/components/game/AngleReveal";
@@ -8,6 +9,7 @@ import { HoldTimer } from "@/components/game/HoldTimer";
 import { ScoreCard } from "@/components/game/ScoreCard";
 import { ShareCard } from "@/components/game/ShareCard";
 import { ShakeGate } from "@/components/game/ShakeGate";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { useAudioCues } from "@/hooks/useAudioCues";
 import { useSensors } from "@/hooks/useSensors";
 import { useGameEngine, type GamePhase } from "@/hooks/useGameEngine";
@@ -18,6 +20,7 @@ import {
   type PracticeChallenge,
 } from "@/lib/game/practice-angle";
 import { trackEvent } from "@/lib/analytics";
+import { useSession } from "@/lib/auth-client";
 
 interface DailyAngle {
   date: string;
@@ -29,6 +32,7 @@ export function GameScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isPractice = searchParams.get("mode") === "practice";
+  const { data: session } = useSession();
 
   const [dailyAngle, setDailyAngle] = useState<DailyAngle | null>(null);
   const [practiceChallenge, setPracticeChallenge] =
@@ -42,15 +46,15 @@ export function GameScreen() {
     orientationActive,
     motionActive,
     portraitValid,
-    source,
-    orientationSource,
-    motionSource,
     startSensors,
   } = useSensors();
   const { playCue, startShakeLoop } = useAudioCues();
 
   const handleComplete = useCallback(
-    async (score: number, samples: { timestamp: number; pitch: number; roll: number }[]) => {
+    async (
+      score: number,
+      samples: { timestamp: number; pitch: number; roll: number }[],
+    ) => {
       playCue("complete");
       trackEvent("attempt_complete", { score, isPractice });
 
@@ -164,125 +168,173 @@ export function GameScreen() {
 
   if (!isPractice && !dailyAngle) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-zinc-500 font-mono animate-pulse">Loading...</p>
+      <div className="flex h-full items-center justify-center">
+        <p className="section-label animate-pulse-glow">Loading</p>
       </div>
     );
   }
 
+  const showHeader = engine.phase === "idle" || engine.phase === "complete";
+  const headerIndex = isPractice ? "Practice" : "01 / Daily";
+  const headerTitle = isPractice ? "Practice Run" : "SteadyHand";
+  const headerSubtitle = isPractice
+    ? "Random angle — no leaderboard"
+    : "One angle. One shot. Steady wins.";
+
   return (
-    <div className="flex flex-col items-center gap-8 px-4 pb-24 pt-8 min-h-screen">
-      {isPractice && (
-        <span className="rounded-full bg-amber-900/50 text-amber-300 px-3 py-1 text-xs">
-          Practice Mode
-        </span>
+    <div className="flex h-full min-h-0 flex-col px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      {showHeader && (
+        <div className="shrink-0 pb-3">
+          <PageHeader
+            index={headerIndex}
+            title={headerTitle}
+            subtitle={headerSubtitle}
+            compact
+          />
+          {!isPractice && dailyAngle && engine.phase === "idle" && (
+            <div className="mt-3 flex justify-center gap-3">
+              <div className="card rounded-sm px-3 py-2 text-center">
+                <p className="section-label">Date</p>
+                <p className="font-mono text-xs text-[var(--fg-muted)] mt-0.5">
+                  {dailyAngle.date}
+                </p>
+              </div>
+              <div className="card rounded-sm px-3 py-2 text-center">
+                <p className="section-label">Axis</p>
+                <p className="font-mono text-xs text-[var(--accent-teal)] mt-0.5 capitalize">
+                  {dailyAngle.axis}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       )}
+
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
+        {engine.phase === "idle" && (
+          <div className="flex flex-col items-center gap-5 text-center animate-fade-up">
+            <p className="section-label">
+              {isPractice ? "Random challenge" : `Today's ${dailyAngle!.axis}`}
+            </p>
+            <span className="font-serif text-6xl text-[var(--fg-subtle)]">
+              ??°
+            </span>
+            <button onClick={handleStart} className="btn-primary px-10 py-3.5">
+              Start
+            </button>
+          </div>
+        )}
+
+        {engine.phase === "shakeGate" && (
+          <div className="flex flex-col items-center gap-4 animate-fade-up">
+            <p className="section-label">02 / Unlock</p>
+            <ShakeGate progress={engine.shakeProgress} />
+            {!motionActive && !orientationActive && (
+              <p className="text-[var(--accent-teal)] text-xs text-center max-w-[16rem] leading-relaxed">
+                No sensor data yet — move your phone. Tap Start again if
+                prompted for motion access.
+              </p>
+            )}
+          </div>
+        )}
+
+        {engine.phase === "angleReveal" && activeChallenge && (
+          <AngleReveal
+            angle={activeChallenge.angleDegrees}
+            axis={activeChallenge.axis}
+          />
+        )}
+
+        {(engine.phase === "targeting" || engine.phase === "hold") &&
+          activeChallenge && (
+            <div className="flex w-full max-w-xs flex-col items-center gap-3">
+              <Dial
+                currentAngle={engine.currentTilt}
+                targetAngle={activeChallenge.angleDegrees}
+                inTolerance={engine.inTolerance}
+                size={200}
+              />
+              <p className="font-mono text-2xl text-[var(--fg)]">
+                {engine.currentTilt.toFixed(1)}°
+              </p>
+              {engine.phase === "targeting" && engine.lockProgress > 0 && (
+                <p className="section-label text-[var(--accent-teal)]">
+                  Locking {Math.round(engine.lockProgress * 100)}%
+                </p>
+              )}
+              {engine.phase === "hold" && (
+                <HoldTimer
+                  remaining={engine.holdRemaining}
+                  inTolerance={engine.inTolerance}
+                />
+              )}
+              {!portraitValid && (
+                <p className="text-[var(--accent-teal)] text-xs">
+                  Hold phone upright
+                </p>
+              )}
+            </div>
+          )}
+
+        {engine.phase === "complete" && (
+          <div className="flex w-full max-w-xs flex-col items-center gap-4 animate-fade-up">
+            <ScoreCard
+              score={engine.score ?? 0}
+              percentile={percentile}
+              isPractice={isPractice}
+              onShare={!isPractice ? handleShare : undefined}
+              onPlayAgain={() => {
+                if (isPractice) {
+                  rollPracticeChallenge();
+                  engine.reset();
+                } else {
+                  router.push("/");
+                }
+              }}
+            />
+            {!isPractice && engine.score != null && dailyAngle && (
+              <ShareCard
+                score={engine.score}
+                percentile={percentile}
+                date={dailyAngle.date}
+                compact
+              />
+            )}
+          </div>
+        )}
+
+        {submitting && (
+          <p className="section-label mt-2">Submitting score</p>
+        )}
+      </div>
 
       {engine.phase === "idle" && (
-        <div className="flex flex-col items-center gap-6 text-center">
-          <p className="text-zinc-500 text-sm uppercase tracking-widest">
-            {isPractice
-              ? "Random challenge"
-              : `Today's ${dailyAngle!.axis}`}
-          </p>
-          <span className="font-mono text-5xl text-zinc-600">??°</span>
-          <button
-            onClick={handleStart}
-            className="rounded-2xl bg-[#4FC3F7] hover:bg-[#29B6F6] text-black px-12 py-4 text-xl font-bold transition-colors"
-          >
-            START
-          </button>
-        </div>
-      )}
-
-      {engine.phase === "shakeGate" && (
-        <>
-          <ShakeGate progress={engine.shakeProgress} />
-          <div className="font-mono text-xs text-zinc-500 text-center space-y-1">
-            <p>
-              pitch {sample ? sample.pitch.toFixed(1) : "—"}° · roll{" "}
-              {sample ? sample.roll.toFixed(1) : "—"}° · motion{" "}
-              {latestRms.toFixed(2)}
-            </p>
-            <p>orient: {orientationSource} · motion: {motionSource}</p>
-          </div>
-          {!motionActive && !orientationActive && (
-            <p className="text-amber-400 text-sm text-center max-w-xs">
-              No sensor data yet — move your phone. If values stay at —, tap
-              START again and allow motion access when prompted.
-            </p>
+        <footer className="shrink-0 space-y-3 pb-2 text-center">
+          <div className="editorial-rule" />
+          {isPractice ? (
+            <Link
+              href="/"
+              className="text-xs tracking-wide text-[var(--fg-muted)] hover:text-[var(--accent-teal)]"
+            >
+              Back to daily challenge
+            </Link>
+          ) : (
+            <Link
+              href="/?mode=practice"
+              className="text-xs tracking-wide text-[var(--fg-muted)] hover:text-[var(--accent-teal)]"
+            >
+              Practice before your daily attempt
+            </Link>
           )}
-        </>
-      )}
-
-      {engine.phase === "angleReveal" && activeChallenge && (
-        <AngleReveal
-          angle={activeChallenge.angleDegrees}
-          axis={activeChallenge.axis}
-        />
-      )}
-
-      {(engine.phase === "targeting" || engine.phase === "hold") &&
-        activeChallenge && (
-        <div className="flex flex-col items-center gap-6">
-          <Dial
-            currentAngle={engine.currentTilt}
-            targetAngle={activeChallenge.angleDegrees}
-            inTolerance={engine.inTolerance}
-          />
-          <p className="font-mono text-3xl text-white">
-            {engine.currentTilt.toFixed(1)}°
-          </p>
-          {engine.phase === "targeting" && engine.lockProgress > 0 && (
-            <p className="text-[#4FC3F7] text-sm">
-              Locking... {Math.round(engine.lockProgress * 100)}%
-            </p>
+          {!session && (
+            <Link
+              href="/sign-in"
+              className="block text-xs text-[var(--fg-subtle)] hover:text-[var(--fg-muted)]"
+            >
+              Sign in to save your score
+            </Link>
           )}
-          {engine.phase === "hold" && (
-            <HoldTimer
-              remaining={engine.holdRemaining}
-              inTolerance={engine.inTolerance}
-            />
-          )}
-          {!portraitValid && (
-            <p className="text-amber-400 text-sm">Hold phone upright</p>
-          )}
-          {!orientationActive && (
-            <p className="text-amber-400 text-sm text-center max-w-xs">
-              Tilt sensor not detected. Check browser sensor permissions.
-            </p>
-          )}
-        </div>
-      )}
-
-      {engine.phase === "complete" && (
-        <div className="flex flex-col items-center gap-6 w-full">
-          <ScoreCard
-            score={engine.score ?? 0}
-            percentile={percentile}
-            isPractice={isPractice}
-            onShare={!isPractice ? handleShare : undefined}
-            onPlayAgain={() => {
-              if (isPractice) {
-                rollPracticeChallenge();
-                engine.reset();
-              } else {
-                router.push("/");
-              }
-            }}
-          />
-          {!isPractice && engine.score != null && dailyAngle && (
-            <ShareCard
-              score={engine.score}
-              percentile={percentile}
-              date={dailyAngle.date}
-            />
-          )}
-        </div>
-      )}
-
-      {submitting && (
-        <p className="text-zinc-500 text-sm">Submitting score...</p>
+        </footer>
       )}
     </div>
   );

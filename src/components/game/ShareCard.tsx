@@ -7,9 +7,15 @@ interface ShareCardProps {
   score: number;
   percentile: number | null;
   date: string;
+  compact?: boolean;
 }
 
-export function ShareCard({ score, percentile, date }: ShareCardProps) {
+export function ShareCard({
+  score,
+  percentile,
+  date,
+  compact = false,
+}: ShareCardProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   const download = async () => {
@@ -21,29 +27,53 @@ export function ShareCard({ score, percentile, date }: ShareCardProps) {
     link.click();
   };
 
+  if (compact) {
+    return (
+      <>
+        <div ref={ref} className="sr-only" aria-hidden>
+          <ShareCardPreview score={score} percentile={percentile} date={date} />
+        </div>
+        <button
+          onClick={download}
+          className="text-xs tracking-wide text-[var(--fg-muted)] hover:text-[var(--accent-teal)]"
+        >
+          Download share card
+        </button>
+      </>
+    );
+  }
+
   return (
-    <div className="space-y-4">
-      <div
-        ref={ref}
-        className="rounded-2xl bg-zinc-900 border border-zinc-700 p-8 text-center w-full max-w-sm"
-      >
-        <p className="text-zinc-500 text-xs uppercase tracking-widest">
-          SteadyHand
-        </p>
-        <p className="font-mono text-6xl font-bold text-[#4FC3F7] mt-4">
-          {score.toFixed(2)}°
-        </p>
-        {percentile != null && (
-          <p className="text-white text-lg mt-2">Top {percentile}% today</p>
-        )}
-        <p className="text-zinc-600 text-xs mt-6">{date}</p>
+    <div className="space-y-3">
+      <div ref={ref}>
+        <ShareCardPreview score={score} percentile={percentile} date={date} />
       </div>
-      <button
-        onClick={download}
-        className="w-full rounded-xl bg-zinc-800 hover:bg-zinc-700 py-3 text-sm font-medium transition-colors"
-      >
-        Download Share Card
+      <button onClick={download} className="btn-secondary w-full py-2.5">
+        Download share card
       </button>
+    </div>
+  );
+}
+
+function ShareCardPreview({
+  score,
+  percentile,
+  date,
+}: {
+  score: number;
+  percentile: number | null;
+  date: string;
+}) {
+  return (
+    <div className="card rounded-sm p-6 text-center w-full max-w-sm">
+      <p className="section-label">SteadyHand</p>
+      <p className="font-serif text-5xl text-[var(--accent-teal)] mt-3">
+        {score.toFixed(2)}°
+      </p>
+      {percentile != null && (
+        <p className="text-[var(--fg)] text-sm mt-2">Top {percentile}% today</p>
+      )}
+      <p className="text-[var(--fg-subtle)] text-xs mt-4">{date}</p>
     </div>
   );
 }

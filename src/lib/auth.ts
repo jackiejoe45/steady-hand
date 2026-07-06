@@ -5,7 +5,11 @@ import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
 import { db, requireDb } from "./db";
 import * as schema from "./db/schema";
-import { getAuthBaseURL, getTrustedOrigins } from "./auth-config";
+import {
+  getAuthBaseURLConfig,
+  getTrustedOrigins,
+  isBetterAuthInfraEnabled,
+} from "./auth-config";
 
 export const auth = betterAuth({
   database: db
@@ -14,9 +18,19 @@ export const auth = betterAuth({
         schema,
       })
     : undefined,
-  secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-in-production-min-32-chars",
-  baseURL: getAuthBaseURL(),
+  secret:
+    process.env.BETTER_AUTH_SECRET ??
+    "dev-secret-change-in-production-min-32-chars",
+  baseURL: getAuthBaseURLConfig(),
   trustedOrigins: getTrustedOrigins(),
+  advanced: {
+    trustedProxyHeaders: true,
+    useSecureCookies: process.env.NODE_ENV === "production",
+    defaultCookieAttributes: {
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    },
+  },
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
@@ -39,10 +53,10 @@ export const auth = betterAuth({
     },
   },
   plugins: [
-    ...(process.env.BETTER_AUTH_API_KEY
+    ...(isBetterAuthInfraEnabled()
       ? [
           dash({
-            apiKey: process.env.BETTER_AUTH_API_KEY,
+            apiKey: process.env.BETTER_AUTH_API_KEY!,
             apiUrl: process.env.BETTER_AUTH_API_URL,
             kvUrl: process.env.BETTER_AUTH_KV_URL,
           }),

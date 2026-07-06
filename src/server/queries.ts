@@ -143,6 +143,198 @@ export async function getDailyLeaderboard(dateStr?: string) {
   }));
 }
 
+export type LeaderboardEntry = {
+  userId: string;
+  displayName: string;
+  avatarUrl?: string | null;
+  scoreMad?: number;
+  avgScore?: number;
+  rank: number;
+  percentile: number;
+  gold?: number;
+  silver?: number;
+  bronze?: number;
+  submittedAt?: Date;
+};
+
+export type CurrentUserLeaderboard = {
+  userId: string;
+  displayName: string;
+  scoreMad?: number;
+  avgScore?: number;
+  rank: number | null;
+  percentile: number | null;
+  gold?: number;
+  silver?: number;
+  bronze?: number;
+  hasPlayed: boolean;
+  valid?: boolean;
+};
+
+export async function getCurrentUserDailyEntry(
+  userId: string,
+  dateStr?: string,
+): Promise<CurrentUserLeaderboard | null> {
+  const database = requireDb();
+  const date = dateStr ?? getUtcTodayDateStr();
+
+  const [row] = await database
+    .select({
+      userId: schema.attempts.userId,
+      displayName: schema.profiles.displayName,
+      scoreMad: schema.attempts.scoreMad,
+      valid: schema.attempts.valid,
+    })
+    .from(schema.attempts)
+    .innerJoin(schema.profiles, eq(schema.attempts.userId, schema.profiles.userId))
+    .where(
+      and(
+        eq(schema.attempts.userId, userId),
+        eq(schema.attempts.date, date),
+        eq(schema.attempts.isPractice, false),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    const [profile] = await database
+      .select({ displayName: schema.profiles.displayName })
+      .from(schema.profiles)
+      .where(eq(schema.profiles.userId, userId))
+      .limit(1);
+
+    if (!profile) return null;
+
+    return {
+      userId,
+      displayName: profile.displayName,
+      rank: null,
+      percentile: null,
+      hasPlayed: false,
+    };
+  }
+
+  if (!row.valid) {
+    return {
+      userId: row.userId,
+      displayName: row.displayName,
+      scoreMad: row.scoreMad,
+      rank: null,
+      percentile: null,
+      hasPlayed: true,
+      valid: false,
+    };
+  }
+
+  const leaderboard = await getDailyLeaderboard(date);
+  const ranked = leaderboard.find((e) => e.userId === userId);
+
+  return {
+    userId: row.userId,
+    displayName: row.displayName,
+    scoreMad: row.scoreMad,
+    rank: ranked?.rank ?? null,
+    percentile: ranked?.percentile ?? null,
+    hasPlayed: true,
+    valid: true,
+  };
+}
+
+export async function getLeaderboardWithUser(
+  type: "daily" | "weekly" | "alltime" | "friends",
+  userId?: string,
+  dateStr?: string,
+) {
+  const date = dateStr ?? getUtcTodayDateStr();
+
+  switch (type) {
+    case "daily": {
+      const entries = await getDailyLeaderboard(date);
+      const currentUser = userId
+        ? await getCurrentUserDailyEntry(userId, date)
+        : null;
+      return { entries, currentUser };
+    }
+    case "weekly": {
+      const entries = await getWeeklyLeaderboard();
+      let currentUser: CurrentUserLeaderboard | null = null;
+      if (userId) {
+        const mine = entries.find((e) => e.userId === userId);
+        if (mine) {
+          currentUser = {
+            userId: mine.userId,
+            displayName: mine.displayName,
+            avgScore: mine.avgScore,
+            rank: mine.rank,
+            percentile: mine.percentile,
+            hasPlayed: true,
+            valid: true,
+          };
+        } else {
+          const [profile] = await requireDb()
+            .select({ displayName: schema.profiles.displayName })
+            .from(schema.profiles)
+            .where(eq(schema.profiles.userId, userId))
+            .limit(1);
+          if (profile) {
+            currentUser = {
+              userId,
+              displayName: profile.displayName,
+              rank: null,
+              percentile: null,
+              hasPlayed: false,
+            };
+          }
+        }
+      }
+      return { entries, currentUser };
+    }
+    case "alltime": {
+      const entries = await getAllTimeLeaderboard();
+      let currentUser: CurrentUserLeaderboard | null = null;
+      if (userId) {
+        const mine = entries.find((e) => e.userId === userId);
+        if (mine) {
+          currentUser = {
+            userId: mine.userId,
+            displayName: mine.displayName,
+            gold: mine.gold,
+            silver: mine.silver,
+            bronze: mine.bronze,
+            rank: entries.indexOf(mine) + 1,
+            percentile: null,
+            hasPlayed: true,
+          };
+        } else {
+          const profileData = await getUserProfile(userId);
+          if (profileData.profile) {
+            currentUser = {
+              userId,
+              displayName: profileData.profile.displayName,
+              gold: profileData.gold,
+              silver: profileData.silver,
+              bronze: profileData.bronze,
+              rank: null,
+              percentile: null,
+              hasPlayed: profileData.profile.totalAttempts > 0,
+            };
+          }
+        }
+      }
+      return { entries, currentUser };
+    }
+    case "friends": {
+      const entries = userId ? await getFriendLeaderboard(userId, date) : [];
+      const currentUser = userId
+        ? await getCurrentUserDailyEntry(userId, date)
+        : null;
+      return { entries, currentUser };
+    }
+    default:
+      return { entries: [], currentUser: null };
+  }
+}
+
 export async function getWeeklyLeaderboard() {
   const database = requireDb();
   const weekAgo = new Date();

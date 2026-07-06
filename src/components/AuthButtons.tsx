@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { signIn, signOut, signUp, useSession } from "@/lib/auth-client";
 
 interface AuthButtonsProps {
@@ -12,7 +13,8 @@ export function AuthButtons({
   googleEnabled: googleEnabledProp,
   appleEnabled: appleEnabledProp,
 }: AuthButtonsProps) {
-  const { data: session, isPending } = useSession();
+  const router = useRouter();
+  const { data: session, isPending, refetch } = useSession();
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
@@ -67,7 +69,7 @@ export function AuthButtons({
           email,
           password,
           name: name.trim() || email.split("@")[0] || "Player",
-          callbackURL: "/",
+          callbackURL: window.location.origin + "/",
         });
         if (result.error) {
           setError(result.error.message ?? "Sign up failed");
@@ -77,13 +79,17 @@ export function AuthButtons({
         const result = await signIn.email({
           email,
           password,
-          callbackURL: "/",
+          callbackURL: window.location.origin + "/",
         });
         if (result.error) {
           setError(result.error.message ?? "Sign in failed");
           return;
         }
       }
+
+      await refetch();
+      router.refresh();
+      router.push("/");
     } catch {
       setError("Something went wrong. Please try again.");
     } finally {

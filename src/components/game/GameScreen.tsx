@@ -136,8 +136,10 @@ export function GameScreen() {
     if (engine.phase === "hold" && !engine.inTolerance) playCue("drift");
   }, [engine.inTolerance, engine.phase, playCue]);
 
-  const handleStart = () => {
-    startSensors();
+  const handleStart = async () => {
+    const sensorsOk = await startSensors();
+    if (!sensorsOk) return;
+
     if (isPractice) {
       const challenge = rollPracticeChallenge();
       engine.start({
@@ -206,8 +208,8 @@ export function GameScreen() {
           </div>
           {!motionActive && !orientationActive && (
             <p className="text-amber-400 text-sm text-center max-w-xs">
-              No sensor data yet — move your phone. If values stay at —, reload
-              and tap START again.
+              No sensor data yet — move your phone. If values stay at —, tap
+              START again and allow motion access when prompted.
             </p>
           )}
         </>

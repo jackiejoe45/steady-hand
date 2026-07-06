@@ -34,7 +34,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Permissions-Policy",
-            value: "accelerometer=*, gyroscope=*",
+            value: "accelerometer=*, gyroscope=*, magnetometer=*",
           },
         ],
       },

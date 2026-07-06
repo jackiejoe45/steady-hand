@@ -86,7 +86,8 @@ class SensorManager {
   private listeners = new Set<Listener>();
   private state: SensorState = { ...defaultState };
   private readings: MotionReading[] = [];
-  private prevAccel: { x: number; y: number; z: number } | null = null;
+  private prevLegacyGravity: { x: number; y: number; z: number } | null = null;
+  private prevGenericAccel: { x: number; y: number; z: number } | null = null;
   private prevOrientation: TiltSample | null = null;
   private orientationEventCount = 0;
   private motionEventCount = 0;
@@ -95,6 +96,7 @@ class SensorManager {
   private lastLegacyOrientAt = 0;
   private genericOrientationStopped = false;
 
+  private linearAccelSensor: AccelSensor | null = null;
   private accelSensor: AccelSensor | null = null;
   private gyroSensor: GyroSensor | null = null;
   private orientSensor: OrientSensor | null = null;
@@ -191,28 +193,42 @@ class SensorManager {
     this.updateOrientation({ timestamp: Date.now(), pitch, roll }, "legacy");
   };
 
+  private hasMotionSample(
+    values: { x: number | null; y: number | null; z: number | null } | null,
+  ): values is { x: number; y: number; z: number } {
+    return (
+      values != null &&
+      values.x != null &&
+      values.y != null &&
+      values.z != null
+    );
+  }
+
   private motionHandler = (e: DeviceMotionEvent) => {
     const linear = e.acceleration;
     const withGravity = e.accelerationIncludingGravity;
     const rotation = e.rotationRate;
 
-    if (linear && (linear.x != null || linear.y != null || linear.z != null)) {
-      this.updateMotion(linear.x ?? 0, linear.y ?? 0, linear.z ?? 0, "legacy");
-    } else if (
-      withGravity &&
-      (withGravity.x != null || withGravity.y != null || withGravity.z != null)
-    ) {
-      const x = withGravity.x ?? 0;
-      const y = withGravity.y ?? 0;
-      const z = withGravity.z ?? 0;
-      if (this.prevAccel) {
-        const dx = x - this.prevAccel.x;
-        const dy = y - this.prevAccel.y;
-        const dz = z - this.prevAccel.z;
-        this.updateMotion(dx, dy, dz, "legacy");
+    if (this.hasMotionSample(linear)) {
+      this.updateMotion(linear.x, linear.y, linear.z, "legacy");
+      return;
+    }
+
+    if (this.hasMotionSample(withGravity)) {
+      const { x, y, z } = withGravity;
+      if (this.prevLegacyGravity) {
+        this.updateMotion(
+          x - this.prevLegacyGravity.x,
+          y - this.prevLegacyGravity.y,
+          z - this.prevLegacyGravity.z,
+          "legacy",
+        );
       }
-      this.prevAccel = { x, y, z };
-    } else if (
+      this.prevLegacyGravity = { x, y, z };
+      return;
+    }
+
+    if (
       rotation &&
       (rotation.alpha != null || rotation.beta != null || rotation.gamma != null)
     ) {
@@ -225,19 +241,29 @@ class SensorManager {
     }
   };
 
+  private onLinearAccelReading = () => {
+    if (!this.linearAccelSensor) return;
+    this.updateMotion(
+      this.linearAccelSensor.x ?? 0,
+      this.linearAccelSensor.y ?? 0,
+      this.linearAccelSensor.z ?? 0,
+      "generic",
+    );
+  };
+
   private onAccelReading = () => {
     if (!this.accelSensor) return;
     const x = this.accelSensor.x ?? 0;
     const y = this.accelSensor.y ?? 0;
     const z = this.accelSensor.z ?? 0;
 
-    if (this.prevAccel) {
-      const dx = x - this.prevAccel.x;
-      const dy = y - this.prevAccel.y;
-      const dz = z - this.prevAccel.z;
+    if (this.prevGenericAccel) {
+      const dx = x - this.prevGenericAccel.x;
+      const dy = y - this.prevGenericAccel.y;
+      const dz = z - this.prevGenericAccel.z;
       this.updateMotion(dx, dy, dz, "generic");
     }
-    this.prevAccel = { x, y, z };
+    this.prevGenericAccel = { x, y, z };
 
     if (!this.orientSensor && this.lastLegacyOrientAt === 0) {
       this.updateOrientation(tiltFromAccelerometer(x, y, z), "generic");
@@ -280,6 +306,7 @@ class SensorManager {
     if (typeof window === "undefined") return false;
 
     const win = window as Window & {
+      LinearAccelerometer?: new (opts: { frequency: number }) => AccelSensor;
       Accelerometer?: new (opts: { frequency: number }) => AccelSensor;
       Gyroscope?: new (opts: { frequency: number }) => GyroSensor;
       AbsoluteOrientationSensor?: new (opts: {
@@ -291,6 +318,20 @@ class SensorManager {
     };
 
     let started = false;
+
+    try {
+      if (win.LinearAccelerometer) {
+        this.linearAccelSensor = new win.LinearAccelerometer({ frequency: 60 });
+        this.linearAccelSensor.addEventListener(
+          "reading",
+          this.onLinearAccelReading,
+        );
+        this.linearAccelSensor.start();
+        started = true;
+      }
+    } catch {
+      this.linearAccelSensor = null;
+    }
 
     try {
       if (win.Accelerometer) {
@@ -330,7 +371,7 @@ class SensorManager {
     return started;
   }
 
-  /** Full activation: legacy sync + permissions + generic sensors. */
+  /** Attach listeners and start sensors. Call after permissions are granted. */
   activate(): void {
     if (this.attached) return;
     this.attached = true;
@@ -339,14 +380,33 @@ class SensorManager {
     this.lastLegacyOrientAt = 0;
     this.genericOrientationStopped = false;
 
-    // Sync — must run in user gesture call stack
     this.attachLegacy();
+    void this.startGenericSensors();
+    this.startWatchdog();
+  }
 
-    void requestSensorPermissions().then(() => this.startGenericSensors());
+  /** Request permissions (must run from a user gesture), then activate. */
+  async ensurePermissionsAndActivate(): Promise<boolean> {
+    const granted = await requestSensorPermissions();
+    if (!granted) {
+      this.detach();
+      return false;
+    }
+    this.activate();
+    return true;
+  }
+
+  isActive(): boolean {
+    return this.attached;
+  }
+
+  private startWatchdog() {
+    if (this.watchdog) return;
 
     this.watchdog = window.setInterval(() => {
       const orientationActive = this.orientationEventCount > 0;
-      const motionActive = this.motionEventCount > 0;
+      const motionActive =
+        this.motionEventCount > 0 || this.orientationEventCount > 0;
       const latestRms =
         this.motionEventCount === 0 && this.orientationEventCount === 0
           ? this.state.latestRms * 0.85
@@ -386,6 +446,7 @@ class SensorManager {
     window.removeEventListener("devicemotion", this.motionHandler);
 
     for (const sensor of [
+      this.linearAccelSensor,
       this.accelSensor,
       this.gyroSensor,
       this.orientSensor,
@@ -396,6 +457,7 @@ class SensorManager {
         // ignore
       }
     }
+    this.linearAccelSensor = null;
     this.accelSensor = null;
     this.gyroSensor = null;
     this.orientSensor = null;
@@ -410,7 +472,8 @@ class SensorManager {
 
   clearReadings() {
     this.readings = [];
-    this.prevAccel = null;
+    this.prevLegacyGravity = null;
+    this.prevGenericAccel = null;
     this.prevOrientation = null;
     this.state = {
       ...this.state,

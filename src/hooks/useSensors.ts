@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TiltSample } from "@/lib/game/constants";
 import { sensorManager } from "@/lib/sensors/manager";
-import {
-  requestSensorPermissions,
-  sensorsNeedPermission,
-} from "@/lib/sensors/permissions";
+import { sensorsNeedPermission } from "@/lib/sensors/permissions";
 
 function setIfChanged<T>(setter: (v: T) => void, next: T, prev: T) {
   if (next !== prev) setter(next);
@@ -84,10 +81,11 @@ export function useSensors() {
     });
   }, []);
 
-  /** Call synchronously from tap — kicks off full sensor activation. */
-  const startSensors = useCallback(() => {
-    setActive(true);
-    sensorManager.activate();
+  /** Request permissions (must run from a user gesture), then activate. */
+  const startSensors = useCallback(async (): Promise<boolean> => {
+    const granted = await sensorManager.ensurePermissionsAndActivate();
+    setActive(granted);
+    return granted;
   }, []);
 
   const stopSensors = useCallback(() => {
@@ -100,13 +98,8 @@ export function useSensors() {
   }, []);
 
   const requestPermission = useCallback(async () => {
-    const granted = await requestSensorPermissions();
-    if (granted) {
-      sensorManager.activate();
-      setActive(true);
-    }
-    return granted;
-  }, []);
+    return startSensors();
+  }, [startSensors]);
 
   return {
     sample,

@@ -8,28 +8,38 @@ export async function requestSensorPermissions(): Promise<boolean> {
   const motionCtor = DeviceMotionEvent as typeof DeviceMotionEvent &
     SensorPermissionCtor;
 
-  let orientationOk = true;
-  let motionOk = true;
+  const needsOrientation =
+    typeof orientationCtor.requestPermission === "function";
+  const needsMotion = typeof motionCtor.requestPermission === "function";
 
-  if (typeof orientationCtor.requestPermission === "function") {
-    try {
-      orientationOk =
-        (await orientationCtor.requestPermission()) === "granted";
-    } catch {
-      orientationOk = false;
-    }
+  // iOS: both prompts must be triggered directly from the user gesture handler.
+  const permissionRequests: Promise<boolean>[] = [];
+
+  if (needsOrientation) {
+    permissionRequests.push(
+      orientationCtor
+        .requestPermission!()
+        .then((state) => state === "granted")
+        .catch(() => false),
+    );
   }
 
-  if (typeof motionCtor.requestPermission === "function") {
-    try {
-      motionOk = (await motionCtor.requestPermission()) === "granted";
-    } catch {
-      motionOk = false;
-    }
+  if (needsMotion) {
+    permissionRequests.push(
+      motionCtor
+        .requestPermission!()
+        .then((state) => state === "granted")
+        .catch(() => false),
+    );
+  }
+
+  if (permissionRequests.length > 0) {
+    const results = await Promise.all(permissionRequests);
+    if (!results.every(Boolean)) return false;
   }
 
   // Android Chrome Permissions API fallback
-  if (orientationOk && motionOk && "permissions" in navigator) {
+  if ("permissions" in navigator) {
     for (const name of ["accelerometer", "gyroscope"] as const) {
       try {
         const status = await navigator.permissions.query({
@@ -44,7 +54,7 @@ export async function requestSensorPermissions(): Promise<boolean> {
     }
   }
 
-  return orientationOk && motionOk;
+  return true;
 }
 
 export function sensorsNeedPermission(): boolean {

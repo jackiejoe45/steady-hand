@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { requestSensorPermissions } from "@/lib/sensors/permissions";
 import { sensorManager } from "@/lib/sensors/manager";
 
 interface OnboardingProps {
@@ -10,6 +9,7 @@ interface OnboardingProps {
 
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(0);
+  const [error, setError] = useState("");
 
   const steps = [
     {
@@ -26,8 +26,13 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     },
   ];
 
-  const handleMotionPermission = () => {
-    sensorManager.activate();
+  const handleMotionPermission = async () => {
+    setError("");
+    const granted = await sensorManager.ensurePermissionsAndActivate();
+    if (!granted) {
+      setError("Sensor permission denied. Enable motion access in Settings.");
+      return;
+    }
     localStorage.setItem("steadyhand_onboarded", "1");
     onComplete();
   };
@@ -44,6 +49,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         <h2 className="text-xl font-bold">{steps[step]?.title}</h2>
         <p className="text-zinc-400 text-sm">{steps[step]?.body}</p>
 
+        {error && <p className="text-red-400 text-sm">{error}</p>}
+
         {step < 2 ? (
           <button
             onClick={() => setStep(step + 1)}
@@ -53,7 +60,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </button>
         ) : (
           <button
-            onClick={handleMotionPermission}
+            onClick={() => void handleMotionPermission()}
             className="w-full rounded-xl bg-[#4FC3F7] text-black py-3 font-medium"
           >
             Enable Motion Sensors

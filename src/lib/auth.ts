@@ -5,7 +5,7 @@ import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
 import { db, requireDb } from "./db";
 import * as schema from "./db/schema";
-import { getTrustedOrigins } from "./auth-config";
+import { getAuthBaseURL, getTrustedOrigins } from "./auth-config";
 
 export const auth = betterAuth({
   database: db
@@ -15,7 +15,7 @@ export const auth = betterAuth({
       })
     : undefined,
   secret: process.env.BETTER_AUTH_SECRET ?? "dev-secret-change-in-production-min-32-chars",
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  baseURL: getAuthBaseURL(),
   trustedOrigins: getTrustedOrigins(),
   emailAndPassword: {
     enabled: true,

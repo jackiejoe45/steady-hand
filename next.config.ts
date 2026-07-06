@@ -8,19 +8,22 @@ const withSerwist = withSerwistInit({
 });
 
 function getAllowedDevOrigins(): string[] {
-  const origins = new Set<string>();
+  const hostnames = new Set<string>(["steady-hand-one.vercel.app"]);
   for (const envVar of [
     process.env.NEXT_PUBLIC_SITE_URL,
     process.env.BETTER_AUTH_URL,
+    process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : undefined,
   ]) {
     if (!envVar) continue;
     try {
-      origins.add(new URL(envVar).hostname);
+      hostnames.add(new URL(envVar).hostname);
     } catch {
       // ignore invalid URLs
     }
   }
-  return [...origins];
+  return [...hostnames];
 }
 
 const nextConfig: NextConfig = {

@@ -1,5 +1,7 @@
 "use client";
 
+import { TiltMotionGuide } from "@/components/game/TiltMotionGuide";
+
 interface ShakeGateProps {
   progress: number;
 }
@@ -12,7 +14,8 @@ export function ShakeGate({ progress }: ShakeGateProps) {
   const offset = circumference * (1 - progress);
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center gap-3">
+      <TiltMotionGuide mode="shake" compact />
       <div className="relative" style={{ width: size, height: size }}>
         <svg width={size} height={size} className="-rotate-90">
           <circle
@@ -42,9 +45,6 @@ export function ShakeGate({ progress }: ShakeGateProps) {
           </span>
         </div>
       </div>
-      <p className="text-center text-[var(--fg-muted)] text-xs max-w-[14rem] leading-relaxed">
-        Move your phone continuously to confirm you&apos;re holding it
-      </p>
     </div>
   );
 }

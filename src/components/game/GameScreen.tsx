@@ -9,6 +9,7 @@ import { HoldTimer } from "@/components/game/HoldTimer";
 import { ScoreCard } from "@/components/game/ScoreCard";
 import { ShareCard } from "@/components/game/ShareCard";
 import { ShakeGate } from "@/components/game/ShakeGate";
+import { TiltMotionGuide } from "@/components/game/TiltMotionGuide";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useAudioCues } from "@/hooks/useAudioCues";
 import { useSensors } from "@/hooks/useSensors";
@@ -212,10 +213,13 @@ export function GameScreen() {
 
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
         {engine.phase === "idle" && (
-          <div className="flex flex-col items-center gap-5 text-center animate-fade-up">
-            <p className="section-label">
-              {isPractice ? "Random challenge" : `Today's ${dailyAngle!.axis}`}
-            </p>
+          <div className="flex flex-col items-center gap-4 text-center animate-fade-up">
+            {!isPractice && dailyAngle && (
+              <TiltMotionGuide mode="intro" axis={dailyAngle.axis} compact />
+            )}
+            {isPractice && (
+              <p className="section-label">Random challenge</p>
+            )}
             <span className="font-serif text-6xl text-[var(--fg-subtle)]">
               ??°
             </span>
@@ -247,7 +251,16 @@ export function GameScreen() {
 
         {(engine.phase === "targeting" || engine.phase === "hold") &&
           activeChallenge && (
-            <div className="flex w-full max-w-xs flex-col items-center gap-3">
+            <div className="flex w-full max-w-xs flex-col items-center gap-2">
+              {engine.phase === "targeting" && (
+                <TiltMotionGuide
+                  mode="targeting"
+                  axis={activeChallenge.axis}
+                  targetAngle={activeChallenge.angleDegrees}
+                  currentAngle={engine.currentTilt}
+                  compact
+                />
+              )}
               <Dial
                 currentAngle={engine.currentTilt}
                 targetAngle={activeChallenge.angleDegrees}

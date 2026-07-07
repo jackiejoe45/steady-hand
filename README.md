@@ -22,9 +22,10 @@ cp .env.example .env.local
 ```
 
 Fill in:
-- `DATABASE_URL` — Supabase pooler connection string (transaction mode)
+- `DATABASE_URL` — Supabase **transaction pooler** (port 6543), e.g. `postgresql://postgres.[ref]:[password]@aws-0-eu-west-1.pooler.supabase.com:6543/postgres`
 - `BETTER_AUTH_SECRET` — `openssl rand -base64 32`
-- `BETTER_AUTH_URL` — `http://localhost:3000`
+- `BETTER_AUTH_URL` — production: `https://steady-hand-one.vercel.app`, local: `http://localhost:3000`
+- `NEXT_PUBLIC_SITE_URL` — same as `BETTER_AUTH_URL`
 - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
 - `APPLE_CLIENT_ID` / `APPLE_CLIENT_SECRET`
 - `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`

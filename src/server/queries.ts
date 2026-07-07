@@ -400,7 +400,14 @@ export async function getAllTimeLeaderboard() {
     )
     .limit(100);
 
-  return rows;
+  return rows.map((row, i) => ({
+    ...row,
+    rank: i + 1,
+    percentile:
+      rows.length <= 1
+        ? 100
+        : Math.max(1, Math.round(100 - (i / (rows.length - 1)) * 99)),
+  }));
 }
 
 export async function submitAttempt(params: {

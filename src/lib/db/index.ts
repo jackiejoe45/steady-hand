@@ -10,6 +10,10 @@ const client = connectionString
 
 export const db = client ? drizzle(client, { schema }) : null;
 
+export function isDbConfigured(): boolean {
+  return Boolean(connectionString && db);
+}
+
 export function requireDb() {
   if (!db) {
     throw new Error("DATABASE_URL is not configured");

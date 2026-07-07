@@ -130,11 +130,15 @@ function LeaderboardContent() {
         if (!Array.isArray(data.entries)) {
           throw new Error("Invalid leaderboard response");
         }
+        if (data.error) {
+          setError(data.error);
+        }
         return data;
       })
       .then((data) => {
         setEntries(data.entries);
         setCurrentUser(data.currentUser ?? null);
+        if (data.error) setError(data.error);
       })
       .catch((err: Error) => {
         setEntries([]);

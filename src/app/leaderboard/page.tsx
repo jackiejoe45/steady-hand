@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
+import { useFriendGroups } from "@/components/FriendGroups";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useSession } from "@/lib/auth-client";
 
@@ -108,18 +109,46 @@ function UserScoreCard({
 
 function LeaderboardContent() {
   const { data: session } = useSession();
+  const { groups: friendGroups, loading: groupsLoading } = useFriendGroups();
   const [tab, setTab] = useState<Tab>("daily");
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [currentUser, setCurrentUser] = useState<CurrentUserEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (friendGroups.length === 0) {
+      setSelectedGroupId(null);
+      return;
+    }
+    if (
+      !selectedGroupId ||
+      !friendGroups.some((g) => g.id === selectedGroupId)
+    ) {
+      setSelectedGroupId(friendGroups[0]!.id);
+    }
+  }, [friendGroups, selectedGroupId]);
+
+  useEffect(() => {
+    if (tab === "friends" && session && groupsLoading) return;
+    if (tab === "friends" && session && friendGroups.length === 0) {
+      setEntries([]);
+      setCurrentUser(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    if (tab === "friends" && session && !selectedGroupId) return;
+
     setLoading(true);
     setError(null);
     const params = new URLSearchParams({ type: tab });
     if (session?.user.id) {
       params.set("userId", session.user.id);
+    }
+    if (tab === "friends" && selectedGroupId) {
+      params.set("groupId", selectedGroupId);
     }
     fetch(`/api/leaderboard?${params}`)
       .then(async (r) => {
@@ -146,7 +175,7 @@ function LeaderboardContent() {
         setError(err.message);
       })
       .finally(() => setLoading(false));
-  }, [tab, session?.user.id]);
+  }, [tab, session?.user.id, selectedGroupId, friendGroups.length, groupsLoading, session]);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "daily", label: "Daily" },
@@ -175,6 +204,28 @@ function LeaderboardContent() {
         ))}
       </div>
 
+      {session && tab === "friends" && friendGroups.length > 0 && (
+        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1">
+          {friendGroups.map((group) => (
+            <button
+              key={group.id}
+              type="button"
+              onClick={() => setSelectedGroupId(group.id)}
+              className={`px-3 py-1.5 text-[0.65rem] tracking-[0.08em] whitespace-nowrap border transition-colors ${
+                selectedGroupId === group.id
+                  ? "border-[var(--accent-teal)] text-[var(--accent-teal)] bg-[var(--bg-soft)]"
+                  : "border-[var(--border)] text-[var(--fg-subtle)] hover:text-[var(--fg-muted)]"
+              }`}
+            >
+              {group.name}
+              <span className="ml-1 text-[var(--fg-subtle)]">
+                ({group.memberCount})
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {session && currentUser && tab !== "friends" && (
         <UserScoreCard tab={tab} user={currentUser} />
       )}
@@ -197,15 +248,29 @@ function LeaderboardContent() {
         </div>
       )}
 
-      {loading ? (
+      {loading || (tab === "friends" && groupsLoading) ? (
         <p className="section-label text-center animate-pulse-glow">Loading</p>
       ) : error ? (
         <p className="text-[var(--fg-muted)] text-sm text-center">{error}</p>
+      ) : tab === "friends" && session && friendGroups.length === 0 ? (
+        <div className="card rounded-sm px-4 py-4 text-center">
+          <p className="text-sm text-[var(--fg-muted)]">
+            Join or create a friend group to see rankings
+          </p>
+          <Link
+            href="/profile"
+            className="inline-block mt-2 text-xs text-[var(--accent-teal)] hover:underline"
+          >
+            Manage groups on profile
+          </Link>
+        </div>
       ) : entries.length === 0 ? (
         <p className="text-[var(--fg-muted)] text-sm text-center">
           {tab === "friends" && !session
             ? "Sign in to see your friend leaderboard"
-            : "No scores yet — be the first to play"}
+            : tab === "friends"
+              ? "No scores in this group today — be the first to play"
+              : "No scores yet — be the first to play"}
         </p>
       ) : (
         <div className="space-y-1.5">

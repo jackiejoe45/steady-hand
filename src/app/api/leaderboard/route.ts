@@ -60,12 +60,13 @@ export async function GET(request: Request) {
       | "friends";
     const userId = searchParams.get("userId") ?? undefined;
     const date = searchParams.get("date") ?? getUtcTodayDateStr();
+    const groupId = searchParams.get("groupId") ?? undefined;
 
     if (type === "friends" && !userId) {
       return NextResponse.json({ entries: [], currentUser: null });
     }
 
-    const result = await getLeaderboardWithUser(type, userId, date);
+    const result = await getLeaderboardWithUser(type, userId, date, groupId);
     return NextResponse.json(serializeResponse(result));
   } catch (error) {
     console.error("Leaderboard fetch failed:", error);

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { db, requireDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import {
@@ -262,6 +262,7 @@ export async function getLeaderboardWithUser(
   type: "daily" | "weekly" | "alltime" | "friends",
   userId?: string,
   dateStr?: string,
+  groupId?: string,
 ) {
   const date = dateStr ?? getUtcTodayDateStr();
 
@@ -342,7 +343,9 @@ export async function getLeaderboardWithUser(
       return { entries, currentUser };
     }
     case "friends": {
-      const entries = userId ? await getFriendLeaderboard(userId, date) : [];
+      const entries = userId
+        ? await getFriendLeaderboard(userId, date, groupId)
+        : [];
       const currentUser = userId
         ? await getCurrentUserDailyEntry(userId, date)
         : null;
@@ -654,6 +657,121 @@ export async function assignDailyMedals(dateStr: string) {
   }
 }
 
+export type FriendGroupMember = {
+  userId: string;
+  displayName: string;
+};
+
+export type FriendGroupWithMembers = {
+  id: string;
+  name: string;
+  inviteCode: string;
+  maxMembers: number;
+  memberCount: number;
+  isCreator: boolean;
+  joinedAt: Date;
+  members: FriendGroupMember[];
+};
+
+export async function getUserFriendGroups(
+  userId: string,
+): Promise<FriendGroupWithMembers[]> {
+  const database = requireDb();
+
+  const memberships = await database
+    .select({
+      id: schema.friendGroups.id,
+      name: schema.friendGroups.name,
+      inviteCode: schema.friendGroups.inviteCode,
+      maxMembers: schema.friendGroups.maxMembers,
+      createdBy: schema.friendGroups.createdBy,
+      joinedAt: schema.friendGroupMembers.joinedAt,
+    })
+    .from(schema.friendGroupMembers)
+    .innerJoin(
+      schema.friendGroups,
+      eq(schema.friendGroupMembers.groupId, schema.friendGroups.id),
+    )
+    .where(eq(schema.friendGroupMembers.userId, userId))
+    .orderBy(desc(schema.friendGroupMembers.joinedAt));
+
+  if (memberships.length === 0) return [];
+
+  const groupIds = memberships.map((g) => g.id);
+  const memberRows = await database
+    .select({
+      groupId: schema.friendGroupMembers.groupId,
+      userId: schema.friendGroupMembers.userId,
+      displayName: schema.profiles.displayName,
+    })
+    .from(schema.friendGroupMembers)
+    .innerJoin(
+      schema.profiles,
+      eq(schema.friendGroupMembers.userId, schema.profiles.userId),
+    )
+    .where(inArray(schema.friendGroupMembers.groupId, groupIds));
+
+  const membersByGroup = new Map<string, FriendGroupMember[]>();
+  for (const row of memberRows) {
+    const list = membersByGroup.get(row.groupId) ?? [];
+    list.push({ userId: row.userId, displayName: row.displayName });
+    membersByGroup.set(row.groupId, list);
+  }
+
+  return memberships.map((group) => {
+    const members = membersByGroup.get(group.id) ?? [];
+    return {
+      id: group.id,
+      name: group.name,
+      inviteCode: group.inviteCode,
+      maxMembers: group.maxMembers,
+      memberCount: members.length,
+      isCreator: group.createdBy === userId,
+      joinedAt: group.joinedAt,
+      members,
+    };
+  });
+}
+
+export async function leaveFriendGroup(userId: string, groupId: string) {
+  const database = requireDb();
+
+  const [membership] = await database
+    .select()
+    .from(schema.friendGroupMembers)
+    .where(
+      and(
+        eq(schema.friendGroupMembers.groupId, groupId),
+        eq(schema.friendGroupMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!membership) throw new Error("You are not in this group");
+
+  await database
+    .delete(schema.friendGroupMembers)
+    .where(
+      and(
+        eq(schema.friendGroupMembers.groupId, groupId),
+        eq(schema.friendGroupMembers.userId, userId),
+      ),
+    );
+
+  const [{ memberCount }] = await database
+    .select({ memberCount: count() })
+    .from(schema.friendGroupMembers)
+    .where(eq(schema.friendGroupMembers.groupId, groupId));
+
+  if (Number(memberCount) === 0) {
+    await database
+      .delete(schema.friendGroups)
+      .where(eq(schema.friendGroups.id, groupId));
+  }
+
+  return { left: true };
+}
+
 export async function createFriendGroup(userId: string, name: string) {
   const database = requireDb();
   const id = generateId();
@@ -672,18 +790,33 @@ export async function createFriendGroup(userId: string, name: string) {
     userId,
   });
 
-  return { id, inviteCode };
+  return { id, inviteCode, name, maxMembers: 5 };
 }
 
 export async function joinFriendGroup(userId: string, inviteCode: string) {
   const database = requireDb();
+  const code = inviteCode.trim().toUpperCase();
+
   const [group] = await database
     .select()
     .from(schema.friendGroups)
-    .where(eq(schema.friendGroups.inviteCode, inviteCode.toUpperCase()))
+    .where(eq(schema.friendGroups.inviteCode, code))
     .limit(1);
 
-  if (!group) throw new Error("Group not found");
+  if (!group) throw new Error("Group not found — check the invite code");
+
+  const [existingMember] = await database
+    .select()
+    .from(schema.friendGroupMembers)
+    .where(
+      and(
+        eq(schema.friendGroupMembers.groupId, group.id),
+        eq(schema.friendGroupMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (existingMember) throw new Error("You are already in this group");
 
   const [{ memberCount }] = await database
     .select({ memberCount: count() })
@@ -694,15 +827,19 @@ export async function joinFriendGroup(userId: string, inviteCode: string) {
     throw new Error("Group is full");
   }
 
-  await database
-    .insert(schema.friendGroupMembers)
-    .values({ groupId: group.id, userId })
-    .onConflictDoNothing();
+  await database.insert(schema.friendGroupMembers).values({
+    groupId: group.id,
+    userId,
+  });
 
   return group;
 }
 
-export async function getFriendLeaderboard(userId: string, dateStr?: string) {
+export async function getFriendLeaderboard(
+  userId: string,
+  dateStr?: string,
+  groupId?: string,
+) {
   const database = requireDb();
   const date = dateStr ?? getUtcTodayDateStr();
 
@@ -713,16 +850,19 @@ export async function getFriendLeaderboard(userId: string, dateStr?: string) {
 
   if (memberships.length === 0) return [];
 
-  const groupIds = memberships.map((m) => m.groupId);
+  const allowedGroupIds = memberships.map((m) => m.groupId);
+  const targetGroupIds = groupId
+    ? allowedGroupIds.includes(groupId)
+      ? [groupId]
+      : []
+    : allowedGroupIds;
+
+  if (targetGroupIds.length === 0) return [];
+
   const members = await database
     .select({ userId: schema.friendGroupMembers.userId })
     .from(schema.friendGroupMembers)
-    .where(
-      sql`${schema.friendGroupMembers.groupId} in (${sql.join(
-        groupIds.map((id) => sql`${id}`),
-        sql`, `,
-      )})`,
-    );
+    .where(inArray(schema.friendGroupMembers.groupId, targetGroupIds));
 
   const memberIds = [...new Set(members.map((m) => m.userId))];
   const allScores = await getDailyLeaderboard(date);

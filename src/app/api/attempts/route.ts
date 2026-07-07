@@ -114,12 +114,12 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
+      ...result,
       scoreMad,
       valid,
       tremorFlag,
       portraitInvalid,
       invalidReason,
-      ...result,
     });
   } catch (error) {
     const message =

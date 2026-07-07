@@ -240,7 +240,7 @@ export function GameScreen() {
   const headerTitle = isPractice ? "Practice Run" : "SteadyHand";
   const headerSubtitle = isPractice
     ? "Random angle — no leaderboard"
-    : "One angle. One shot. Steady wins.";
+    : "One angle. One shot. ";
 
   return (
     <div className="flex h-full min-h-0 flex-col px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">

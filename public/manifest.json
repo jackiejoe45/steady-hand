@@ -1,7 +1,7 @@
 {
   "name": "SteadyHand",
   "short_name": "SteadyHand",
-  "description": "One angle. One shot. Steady wins.",
+  "description": "One angle. One shot. ",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0b0a",

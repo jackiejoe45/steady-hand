@@ -24,7 +24,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "SteadyHand",
-  description: "One angle. One shot. Steady wins.",
+  description: "One angle. One shot. ",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,

@@ -1,6 +1,6 @@
 # SteadyHand v2.0
 
-One angle. One shot. Steady wins.
+One angle. One shot. 
 
 Progressive Web App skill game — tilt your phone to a secret daily angle and hold it perfectly still.
 

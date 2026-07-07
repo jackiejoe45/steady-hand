@@ -22,10 +22,12 @@ export const GAME_CONFIG = {
   driftWeight: 3,
   /** Portrait constraint: max deviation from vertical (degrees) */
   portraitMaxTilt: 30,
-  /** Tremor SD threshold for surface detection (degrees) */
+  /** Tremor SD threshold for surface detection (degrees) — both axes must freeze below this */
   tremorSdThreshold: 0.01,
-  /** Minimum duration of low tremor to flag (seconds) */
-  tremorMinDuration: 0.5,
+  /** Minimum duration of dual-axis freeze to flag surface (seconds) */
+  tremorMinDuration: 1.0,
+  /** Scores below this MAD are disallowed from the leaderboard (handheld floor) */
+  minLeaderboardMad: 0.03,
 } as const;
 
 export type Axis = "pitch" | "roll";

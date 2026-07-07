@@ -16,6 +16,7 @@ import { useSensors } from "@/hooks/useSensors";
 import { useGameEngine, type GamePhase } from "@/hooks/useGameEngine";
 import type { Axis } from "@/lib/game/constants";
 import { computeDailyAngle, getUtcTodayDateStr } from "@/lib/game/daily-angle";
+import { isHoldPostureValid } from "@/lib/game/scoring";
 import {
   generatePracticeChallenge,
   type PracticeChallenge,
@@ -46,6 +47,7 @@ export function GameScreen() {
     null,
   );
   const [scoreSaved, setScoreSaved] = useState(false);
+  const [attemptValid, setAttemptValid] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [starting, setStarting] = useState(false);
 
@@ -72,6 +74,7 @@ export function GameScreen() {
       setSubmitting(true);
       setPerformanceSummary(null);
       setScoreSaved(false);
+      setAttemptValid(null);
       setPercentile(null);
       setRank(null);
       try {
@@ -88,7 +91,8 @@ export function GameScreen() {
         if (data.percentile != null) setPercentile(data.percentile);
         if (data.rank != null) setRank(data.rank);
         if (data.summary) setPerformanceSummary(data.summary);
-        setScoreSaved(Boolean(data.saved));
+        setAttemptValid(data.valid ?? null);
+        setScoreSaved(Boolean(data.saved) && data.valid !== false);
       } catch {
         setPerformanceSummary(
           "Couldn't compare your score right now. Check the leaderboard.",
@@ -107,6 +111,11 @@ export function GameScreen() {
   const activeChallenge: PracticeChallenge | null = isPractice
     ? practiceChallenge
     : dailyExclude;
+
+  const postureValid =
+    sample && activeChallenge
+      ? isHoldPostureValid(sample, activeChallenge.axis)
+      : portraitValid;
 
   const handlePhaseChange = useCallback(
     (phase: GamePhase) => {
@@ -340,9 +349,11 @@ export function GameScreen() {
                   inTolerance={engine.inTolerance}
                 />
               )}
-              {!portraitValid && (
+              {!postureValid && (
                 <p className="text-[var(--accent-teal)] text-xs">
-                  Hold phone upright
+                  {activeChallenge.axis === "roll"
+                    ? "Hold phone upright"
+                    : "Keep phone level (no sideways tilt)"}
                 </p>
               )}
             </div>
@@ -356,6 +367,7 @@ export function GameScreen() {
               rank={rank}
               summary={performanceSummary}
               saved={scoreSaved}
+              valid={attemptValid}
               isPractice={isPractice}
               onShare={scoreSaved && !isPractice ? handleShare : undefined}
               onPlayAgain={() => {

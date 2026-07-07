@@ -6,6 +6,7 @@ interface ScoreCardProps {
   rank?: number | null;
   summary?: string | null;
   saved?: boolean;
+  valid?: boolean | null;
   isPractice?: boolean;
   onShare?: () => void;
   onPlayAgain?: () => void;
@@ -17,6 +18,7 @@ export function ScoreCard({
   rank,
   summary,
   saved = false,
+  valid = null,
   isPractice,
   onShare,
   onPlayAgain,
@@ -36,8 +38,18 @@ export function ScoreCard({
       </div>
 
       {summary && !isPractice && (
-        <div className="card rounded-sm px-4 py-3 text-center w-full">
-          <p className="text-xs text-[var(--fg-muted)] leading-relaxed">
+        <div
+          className={`card rounded-sm px-4 py-3 text-center w-full ${
+            valid === false ? "border-[var(--danger)]" : ""
+          }`}
+        >
+          <p
+            className={`text-xs leading-relaxed ${
+              valid === false
+                ? "text-[var(--danger)]"
+                : "text-[var(--fg-muted)]"
+            }`}
+          >
             {summary}
           </p>
         </div>

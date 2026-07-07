@@ -16,6 +16,7 @@ function computeWeightedMAD(
   let totalWeight = 0;
   const tolerance = 2;
   const driftWeight = 3;
+  const minLeaderboardMad = 0.03;
 
   for (const s of samples) {
     const value = axis === "pitch" ? s.pitch : s.roll;
@@ -92,11 +93,14 @@ Deno.serve(async (req) => {
       (s) => Math.abs(s.pitch - 90) > 30,
     );
 
+    const suspiciouslyLow = scoreMad < minLeaderboardMad;
+
     return new Response(
       JSON.stringify({
         scoreMad,
-        valid: !tremorFlag && !portraitInvalid,
+        valid: !tremorFlag && !portraitInvalid && !suspiciouslyLow,
         tremorFlag,
+        suspiciouslyLow,
         angle: daily.angle,
         axis: daily.axis,
         deviceModel,

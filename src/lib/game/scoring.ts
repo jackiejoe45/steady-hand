@@ -8,9 +8,21 @@ export function isInTolerance(current: number, target: number): boolean {
   return Math.abs(current - target) <= GAME_CONFIG.tolerance;
 }
 
+/** Roll-axis days: pitch stays near vertical. Pitch-axis days: roll stays level. */
+export function isHoldPostureValid(sample: TiltSample, axis: Axis): boolean {
+  if (axis === "roll") {
+    return Math.abs(sample.pitch - 90) <= GAME_CONFIG.portraitMaxTilt;
+  }
+  return Math.abs(sample.roll) <= GAME_CONFIG.portraitMaxTilt;
+}
+
 export function isPortraitValid(pitch: number): boolean {
-  // beta near 90° is portrait upright; allow ±30° from vertical
   return Math.abs(pitch - 90) <= GAME_CONFIG.portraitMaxTilt;
+}
+
+/** Too steady for handheld play — likely surface or spoofed sensors */
+export function isDisallowedLeaderboardScore(scoreMad: number): boolean {
+  return scoreMad < GAME_CONFIG.minLeaderboardMad;
 }
 
 /** Weighted mean absolute deviation — lower is better */
@@ -104,26 +116,31 @@ export function computeTremorSd(
   return Math.sqrt(variance);
 }
 
-/** Detect surface placement: low tremor SD sustained */
+/** Detect surface placement: both axes frozen simultaneously (desk, not steady hand) */
 export function detectSurfaceCheat(
   samples: TiltSample[],
   axis: Axis,
 ): boolean {
   if (samples.length < 10) return false;
 
+  const otherAxis: Axis = axis === "pitch" ? "roll" : "pitch";
   const windowMs = 100;
-  let lowTremorMs = 0;
+  let frozenMs = 0;
   const step = 50;
 
   for (let i = 10; i < samples.length; i++) {
     const window = samples.slice(Math.max(0, i - 20), i + 1);
-    const sd = computeTremorSd(window, axis, windowMs);
-    if (sd < GAME_CONFIG.tremorSdThreshold) {
-      lowTremorMs += step;
+    const activeSd = computeTremorSd(window, axis, windowMs);
+    const otherSd = computeTremorSd(window, otherAxis, windowMs);
+    if (
+      activeSd < GAME_CONFIG.tremorSdThreshold &&
+      otherSd < GAME_CONFIG.tremorSdThreshold
+    ) {
+      frozenMs += step;
     } else {
-      lowTremorMs = 0;
+      frozenMs = 0;
     }
-    if (lowTremorMs >= GAME_CONFIG.tremorMinDuration * 1000) {
+    if (frozenMs >= GAME_CONFIG.tremorMinDuration * 1000) {
       return true;
     }
   }

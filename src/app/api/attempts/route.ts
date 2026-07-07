@@ -7,12 +7,14 @@ import {
   computeWeightedMAD,
   detectSurfaceCheat,
   downsample,
-  isPortraitValid,
+  isDisallowedLeaderboardScore,
+  isHoldPostureValid,
 } from "@/lib/game/scoring";
 import {
   compareScoreToDaily,
   getOrCreateDailyAngle,
   submitAttempt,
+  buildPerformanceSummary,
 } from "@/server/queries";
 import type { Axis, TiltSample } from "@/lib/game/constants";
 
@@ -41,7 +43,7 @@ export async function POST(request: Request) {
     const axis = dailyAngle.axis as Axis;
 
     const portraitInvalid = downsampled.some(
-      (s) => !isPortraitValid(s.pitch),
+      (s) => !isHoldPostureValid(s, axis),
     );
     const tremorFlag = detectSurfaceCheat(downsampled, axis);
     const scoreMad = computeWeightedMAD(
@@ -49,14 +51,26 @@ export async function POST(request: Request) {
       dailyAngle.angleDegrees,
       axis,
     );
+    const suspiciouslyLow = isDisallowedLeaderboardScore(scoreMad);
 
-    const valid = !portraitInvalid && !tremorFlag;
+    const valid = !portraitInvalid && !tremorFlag && !suspiciouslyLow;
+    const invalidReason = valid
+      ? null
+      : portraitInvalid
+        ? "posture"
+        : tremorFlag
+          ? "surface"
+          : suspiciouslyLow
+            ? "too_good"
+            : null;
 
     if (parsed.isPractice) {
       return NextResponse.json({
         scoreMad,
         valid,
         tremorFlag,
+        portraitInvalid,
+        invalidReason,
         isPractice: true,
         saved: false,
       });
@@ -68,8 +82,21 @@ export async function POST(request: Request) {
         scoreMad,
         valid,
         tremorFlag,
+        portraitInvalid,
+        invalidReason,
         saved: false,
         ...comparison,
+        summary: valid
+          ? comparison.summary
+          : buildPerformanceSummary({
+              scoreMad,
+              percentile: comparison.percentile,
+              rank: comparison.rank,
+              playerCount: comparison.playerCount,
+              saved: false,
+              valid: false,
+              invalidReason,
+            }),
       });
     }
 
@@ -82,12 +109,16 @@ export async function POST(request: Request) {
       isPractice: false,
       valid,
       tremorFlag,
+      portraitInvalid,
+      suspiciouslyLow,
     });
 
     return NextResponse.json({
       scoreMad,
       valid,
       tremorFlag,
+      portraitInvalid,
+      invalidReason,
       ...result,
     });
   } catch (error) {

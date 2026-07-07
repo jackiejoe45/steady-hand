@@ -7,6 +7,7 @@ import {
   getRankTier,
 } from "@/lib/game/scoring";
 import { computeDailyAngle, getUtcTodayDateStr } from "@/lib/game/daily-angle";
+import { GAME_CONFIG } from "@/lib/game/constants";
 
 function generateId() {
   return crypto.randomUUID();
@@ -55,9 +56,26 @@ export function buildPerformanceSummary(params: {
   rank: number | null;
   playerCount: number;
   saved: boolean;
+  valid?: boolean;
+  invalidReason?: string | null;
 }): string {
-  const { scoreMad, percentile, rank, playerCount, saved } = params;
+  const { scoreMad, percentile, rank, playerCount, saved, valid, invalidReason } =
+    params;
   const score = scoreMad.toFixed(2);
+
+  if (valid === false) {
+    const retry = saved ? " Try again today." : "";
+    if (invalidReason === "posture") {
+      return `${score}° — keep the phone upright throughout the hold.${retry}`;
+    }
+    if (invalidReason === "surface") {
+      return `${score}° — hold the phone in your hand, not on a flat surface.${retry}`;
+    }
+    if (invalidReason === "too_good") {
+      return `${score}° — below the ${GAME_CONFIG.minLeaderboardMad}° handheld floor. Not ranked.${retry}`;
+    }
+    return `${score}° — invalid attempt, not ranked.${retry}`;
+  }
 
   if (saved && rank != null) {
     return `Ranked #${rank} today — top ${percentile}% with ${score}° MAD`;
@@ -419,8 +437,20 @@ export async function submitAttempt(params: {
   isPractice: boolean;
   valid: boolean;
   tremorFlag: boolean;
+  portraitInvalid?: boolean;
+  suspiciouslyLow?: boolean;
 }) {
   const database = requireDb();
+
+  const invalidReason = params.valid
+    ? null
+    : params.portraitInvalid
+      ? "posture"
+      : params.tremorFlag
+        ? "surface"
+        : params.suspiciouslyLow
+          ? "too_good"
+          : null;
 
   if (!params.isPractice) {
     const [existing] = await database
@@ -435,8 +465,52 @@ export async function submitAttempt(params: {
       )
       .limit(1);
 
-    if (existing) {
+    if (existing?.valid) {
       throw new Error("Already submitted today's attempt");
+    }
+
+    if (existing && !existing.valid) {
+      await database
+        .update(schema.attempts)
+        .set({
+          scoreMad: params.scoreMad,
+          deviceModel: params.deviceModel,
+          valid: params.valid,
+          tremorFlag: params.tremorFlag,
+          rawSamples: params.samples,
+          submittedAt: new Date(),
+        })
+        .where(eq(schema.attempts.id, existing.id));
+
+      const leaderboard = await getDailyLeaderboard(params.date);
+      const entry = leaderboard.find((e) => e.userId === params.userId);
+      const percentile = entry?.percentile ?? null;
+      const rank = entry?.rank ?? null;
+
+      if (params.valid) {
+        await updateProfileAfterAttempt(
+          params.userId,
+          params.scoreMad,
+          params.date,
+        );
+      }
+
+      return {
+        attemptId: existing.id,
+        percentile,
+        rank,
+        saved: true,
+        valid: params.valid,
+        summary: buildPerformanceSummary({
+          scoreMad: params.scoreMad,
+          percentile: percentile ?? 100,
+          rank,
+          playerCount: leaderboard.length,
+          saved: true,
+          valid: params.valid,
+          invalidReason,
+        }),
+      };
     }
   }
 
@@ -468,12 +542,15 @@ export async function submitAttempt(params: {
     percentile,
     rank,
     saved: true,
+    valid: params.valid,
     summary: buildPerformanceSummary({
       scoreMad: params.scoreMad,
       percentile: percentile ?? 100,
       rank,
       playerCount: leaderboard.length,
       saved: true,
+      valid: params.valid,
+      invalidReason,
     }),
   };
 }

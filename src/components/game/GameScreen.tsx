@@ -1,8 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { HowToPlay } from "@/components/HowToPlay";
+import { SettingsPanel } from "@/components/SettingsPanel";
+import { usePreferences } from "@/components/ThemeProvider";
 import { AngleReveal } from "@/components/game/AngleReveal";
 import { Dial } from "@/components/game/Dial";
 import { HoldTimer } from "@/components/game/HoldTimer";
@@ -15,12 +18,17 @@ import { useAudioCues } from "@/hooks/useAudioCues";
 import { useSensors } from "@/hooks/useSensors";
 import { useGameEngine, type GamePhase } from "@/hooks/useGameEngine";
 import type { Axis } from "@/lib/game/constants";
+import { GAME_CONFIG } from "@/lib/game/constants";
 import { computeDailyAngle, getUtcTodayDateStr } from "@/lib/game/daily-angle";
 import { isHoldPostureValid } from "@/lib/game/scoring";
 import {
   generatePracticeChallenge,
   type PracticeChallenge,
 } from "@/lib/game/practice-angle";
+import {
+  getLocalDailyDone,
+  setLocalDailyDone,
+} from "@/lib/preferences";
 import { trackEvent } from "@/lib/analytics";
 import { useSession } from "@/lib/auth-client";
 
@@ -30,11 +38,18 @@ interface DailyAngle {
   axis: Axis;
 }
 
+interface UserAttempt {
+  scoreMad: number;
+  valid: boolean;
+  completed: boolean;
+}
+
 export function GameScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isPractice = searchParams.get("mode") === "practice";
   const { data: session } = useSession();
+  const { hardMode } = usePreferences();
 
   const [dailyAngle, setDailyAngle] = useState<DailyAngle | null>(null);
   const [todayDate, setTodayDate] = useState(getUtcTodayDateStr());
@@ -50,6 +65,12 @@ export function GameScreen() {
   const [attemptValid, setAttemptValid] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [dailyCompleted, setDailyCompleted] = useState(false);
+  const [completedScore, setCompletedScore] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [showDial, setShowDial] = useState(true);
+  const targetingStartRef = useRef<number | null>(null);
 
   const {
     sample,
@@ -92,7 +113,14 @@ export function GameScreen() {
         if (data.rank != null) setRank(data.rank);
         if (data.summary) setPerformanceSummary(data.summary);
         setAttemptValid(data.valid ?? null);
-        setScoreSaved(Boolean(data.saved) && data.valid !== false);
+        const saved = Boolean(data.saved) && data.valid !== false;
+        setScoreSaved(saved);
+
+        if (data.valid) {
+          setLocalDailyDone(todayDate);
+          setDailyCompleted(true);
+          setCompletedScore(score);
+        }
       } catch {
         setPerformanceSummary(
           "Couldn't compare your score right now. Check the leaderboard.",
@@ -101,7 +129,7 @@ export function GameScreen() {
         setSubmitting(false);
       }
     },
-    [isPractice, playCue],
+    [isPractice, playCue, todayDate],
   );
 
   const dailyExclude = dailyAngle
@@ -122,6 +150,14 @@ export function GameScreen() {
       if (phase === "shakeGate") playCue("shake");
       if (phase === "angleReveal") playCue("reveal");
       if (phase === "hold") playCue("lock");
+      if (phase === "targeting") {
+        setShowDial(true);
+        targetingStartRef.current = Date.now();
+      }
+      if (phase === "idle") {
+        targetingStartRef.current = null;
+        setShowDial(true);
+      }
     },
     [playCue],
   );
@@ -148,6 +184,7 @@ export function GameScreen() {
           exists?: boolean;
           angleDegrees?: number;
           axis?: Axis;
+          userAttempt?: UserAttempt | null;
         }) => {
           setTodayDate(data.date);
           if (data.exists && data.angleDegrees != null && data.axis) {
@@ -156,6 +193,14 @@ export function GameScreen() {
               angleDegrees: data.angleDegrees,
               axis: data.axis,
             });
+          }
+          const localDone = getLocalDailyDone(data.date);
+          const serverDone = data.userAttempt?.completed ?? false;
+          if (serverDone || localDone) {
+            setDailyCompleted(true);
+            if (data.userAttempt?.scoreMad != null) {
+              setCompletedScore(data.userAttempt.scoreMad);
+            }
           }
           setDailyReady(true);
         },
@@ -182,7 +227,29 @@ export function GameScreen() {
     if (engine.phase === "hold" && !engine.inTolerance) playCue("drift");
   }, [engine.inTolerance, engine.phase, playCue]);
 
+  useEffect(() => {
+    if (!hardMode || engine.phase !== "targeting") return;
+
+    const interval = window.setInterval(() => {
+      if (!targetingStartRef.current) return;
+      const elapsed = Date.now() - targetingStartRef.current;
+      if (elapsed >= GAME_CONFIG.hardModeIndicatorMs) {
+        setShowDial(false);
+      }
+    }, 100);
+
+    return () => window.clearInterval(interval);
+  }, [hardMode, engine.phase]);
+
+  useEffect(() => {
+    if (engine.phase === "hold" && hardMode) {
+      setShowDial(false);
+    }
+  }, [engine.phase, hardMode]);
+
   const handleStart = async () => {
+    if (!isPractice && dailyCompleted) return;
+
     const sensorsOk = await startSensors();
     if (!sensorsOk) return;
 
@@ -214,7 +281,7 @@ export function GameScreen() {
         setStarting(false);
       }
     }
-    trackEvent("game_start", { isPractice });
+    trackEvent("game_start", { isPractice, hardMode });
   };
 
   const handleShare = async () => {
@@ -240,18 +307,32 @@ export function GameScreen() {
   const headerTitle = isPractice ? "Practice Run" : "SteadyHand";
   const headerSubtitle = isPractice
     ? "Random angle — no leaderboard"
-    : "One angle. One shot. ";
+    : "One angle. One shot.";
+
+  const dialVisible = !hardMode || showDial;
+  const dailyPlayLocked =
+    !isPractice && dailyCompleted && engine.phase === "idle";
 
   return (
     <div className="flex h-full min-h-0 flex-col px-4 pt-[max(0.75rem,env(safe-area-inset-top))]">
       {showHeader && (
         <div className="shrink-0 pb-3">
-          <PageHeader
-            index={headerIndex}
-            title={headerTitle}
-            subtitle={headerSubtitle}
-            compact
-          />
+          <div className="flex items-start justify-between gap-2">
+            <PageHeader
+              index={headerIndex}
+              title={headerTitle}
+              subtitle={headerSubtitle}
+              compact
+            />
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="mt-1 shrink-0 rounded-sm border border-[var(--border)] px-2.5 py-1.5 text-[0.65rem] tracking-[0.12em] uppercase text-[var(--fg-muted)] hover:border-[var(--border-strong)] hover:text-[var(--fg)]"
+              aria-label="Settings"
+            >
+              ⚙
+            </button>
+          </div>
           {!isPractice && engine.phase === "idle" && (
             <div className="mt-3 flex justify-center gap-3">
               <div className="card rounded-sm px-3 py-2 text-center">
@@ -263,9 +344,21 @@ export function GameScreen() {
               <div className="card rounded-sm px-3 py-2 text-center">
                 <p className="section-label">Status</p>
                 <p className="font-mono text-xs text-[var(--accent-teal)] mt-0.5 capitalize">
-                  {dailyAngle ? dailyAngle.axis : "Locked"}
+                  {dailyCompleted
+                    ? "Complete"
+                    : dailyAngle
+                      ? dailyAngle.axis
+                      : "Locked"}
                 </p>
               </div>
+              {hardMode && !dailyCompleted && (
+                <div className="card rounded-sm px-3 py-2 text-center">
+                  <p className="section-label">Mode</p>
+                  <p className="font-mono text-xs text-[var(--accent-teal)] mt-0.5">
+                    Hard
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -274,26 +367,54 @@ export function GameScreen() {
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
         {engine.phase === "idle" && (
           <div className="flex flex-col items-center gap-4 text-center animate-fade-up">
-            {!isPractice && dailyAngle ? (
-              <TiltMotionGuide mode="intro" axis={dailyAngle.axis} compact />
-            ) : !isPractice ? (
-              <p className="text-xs text-[var(--fg-muted)] max-w-[14rem]">
-                Start to unlock today&apos;s angle for everyone
-              </p>
-            ) : null}
-            {isPractice && (
-              <p className="section-label">Random challenge</p>
+            {dailyPlayLocked ? (
+              <>
+                <p className="section-label">Today&apos;s attempt complete</p>
+                {completedScore != null && (
+                  <span className="font-serif text-6xl text-[var(--accent-teal)]">
+                    {completedScore.toFixed(2)}°
+                  </span>
+                )}
+                <p className="text-xs text-[var(--fg-muted)] max-w-[16rem] leading-relaxed">
+                  You&apos;ve played today&apos;s daily challenge. Come back
+                  tomorrow for a new angle, or practice in the meantime.
+                </p>
+                <Link
+                  href="/?mode=practice"
+                  className="btn-primary px-10 py-3.5"
+                >
+                  Practice mode
+                </Link>
+              </>
+            ) : (
+              <>
+                {!isPractice && dailyAngle ? (
+                  <TiltMotionGuide mode="intro" axis={dailyAngle.axis} compact />
+                ) : !isPractice ? (
+                  <p className="text-xs text-[var(--fg-muted)] max-w-[14rem]">
+                    Start to unlock today&apos;s angle for everyone
+                  </p>
+                ) : null}
+                {isPractice && (
+                  <p className="section-label">Random challenge</p>
+                )}
+                <span className="font-serif text-6xl text-[var(--fg-subtle)]">
+                  ??°
+                </span>
+                {hardMode && !isPractice && (
+                  <p className="text-xs text-[var(--accent-teal)]">
+                    Hard mode — dial hides during play
+                  </p>
+                )}
+                <button
+                  onClick={handleStart}
+                  disabled={starting}
+                  className="btn-primary px-10 py-3.5 disabled:opacity-50"
+                >
+                  {starting ? "Loading..." : "Start"}
+                </button>
+              </>
             )}
-            <span className="font-serif text-6xl text-[var(--fg-subtle)]">
-              ??°
-            </span>
-            <button
-              onClick={handleStart}
-              disabled={starting}
-              className="btn-primary px-10 py-3.5 disabled:opacity-50"
-            >
-              {starting ? "Loading..." : "Start"}
-            </button>
           </div>
         )}
 
@@ -320,7 +441,7 @@ export function GameScreen() {
         {(engine.phase === "targeting" || engine.phase === "hold") &&
           activeChallenge && (
             <div className="flex w-full max-w-xs flex-col items-center gap-2">
-              {engine.phase === "targeting" && (
+              {engine.phase === "targeting" && dialVisible && (
                 <TiltMotionGuide
                   mode="targeting"
                   axis={activeChallenge.axis}
@@ -329,15 +450,31 @@ export function GameScreen() {
                   compact
                 />
               )}
-              <Dial
-                currentAngle={engine.currentTilt}
-                targetAngle={activeChallenge.angleDegrees}
-                inTolerance={engine.inTolerance}
-                size={200}
-              />
-              <p className="font-mono text-2xl text-[var(--fg)]">
-                {engine.currentTilt.toFixed(1)}°
-              </p>
+              {dialVisible ? (
+                <>
+                  <Dial
+                    currentAngle={engine.currentTilt}
+                    targetAngle={activeChallenge.angleDegrees}
+                    inTolerance={engine.inTolerance}
+                    size={200}
+                  />
+                  <p className="font-mono text-2xl text-[var(--fg)]">
+                    {engine.currentTilt.toFixed(1)}°
+                  </p>
+                </>
+              ) : (
+                <div className="flex h-[200px] flex-col items-center justify-center gap-2">
+                  <p className="section-label text-[var(--accent-teal)]">
+                    Hard mode
+                  </p>
+                  <p className="text-xs text-[var(--fg-muted)] text-center max-w-[12rem]">
+                    Dial hidden — trust your memory
+                  </p>
+                  <p className="font-mono text-lg text-[var(--fg-subtle)]">
+                    {engine.currentTilt.toFixed(1)}°
+                  </p>
+                </div>
+              )}
               {engine.phase === "targeting" && engine.lockProgress > 0 && (
                 <p className="section-label text-[var(--accent-teal)]">
                   Locking {Math.round(engine.lockProgress * 100)}%
@@ -370,15 +507,28 @@ export function GameScreen() {
               valid={attemptValid}
               isPractice={isPractice}
               onShare={scoreSaved && !isPractice ? handleShare : undefined}
-              onPlayAgain={() => {
-                if (isPractice) {
-                  rollPracticeChallenge();
-                  engine.reset();
-                } else {
-                  router.push("/");
-                }
-              }}
+              onPlayAgain={
+                isPractice
+                  ? () => {
+                      rollPracticeChallenge();
+                      engine.reset();
+                    }
+                  : attemptValid === false
+                    ? () => engine.reset()
+                    : undefined
+              }
+              playAgainLabel={
+                isPractice || attemptValid === false ? "Try again" : undefined
+              }
             />
+            {!isPractice && attemptValid !== false && (
+              <Link
+                href="/?mode=practice"
+                className="btn-secondary w-full py-2.5 text-center"
+              >
+                Practice mode
+              </Link>
+            )}
             {!isPractice && !scoreSaved && (
               <Link
                 href="/leaderboard"
@@ -413,7 +563,7 @@ export function GameScreen() {
             >
               Back to daily challenge
             </Link>
-          ) : (
+          ) : dailyPlayLocked ? null : (
             <Link
               href="/?mode=practice"
               className="text-xs tracking-wide text-[var(--fg-muted)] hover:text-[var(--accent-teal)]"
@@ -421,6 +571,13 @@ export function GameScreen() {
               Practice before your daily attempt
             </Link>
           )}
+          <button
+            type="button"
+            onClick={() => setShowTutorial(true)}
+            className="block w-full text-xs text-[var(--fg-subtle)] hover:text-[var(--fg-muted)]"
+          >
+            How to play
+          </button>
           {!session && (
             <Link
               href="/sign-in"
@@ -431,6 +588,16 @@ export function GameScreen() {
           )}
         </footer>
       )}
+
+      <SettingsPanel
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+        onOpenTutorial={() => setShowTutorial(true)}
+      />
+      <HowToPlay
+        open={showTutorial}
+        onClose={() => setShowTutorial(false)}
+      />
     </div>
   );
 }

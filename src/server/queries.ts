@@ -26,6 +26,34 @@ export async function getDailyAngle(dateStr?: string) {
   return existing ?? null;
 }
 
+/** Check if a signed-in user has completed today's daily attempt */
+export async function getUserDailyAttempt(userId: string, dateStr?: string) {
+  const database = requireDb();
+  const date = dateStr ?? getUtcTodayDateStr();
+  const [attempt] = await database
+    .select({
+      scoreMad: schema.attempts.scoreMad,
+      valid: schema.attempts.valid,
+    })
+    .from(schema.attempts)
+    .where(
+      and(
+        eq(schema.attempts.userId, userId),
+        eq(schema.attempts.date, date),
+        eq(schema.attempts.isPractice, false),
+      ),
+    )
+    .limit(1);
+
+  if (!attempt) return null;
+
+  return {
+    scoreMad: attempt.scoreMad,
+    valid: attempt.valid,
+    completed: attempt.valid,
+  };
+}
+
 /** Create today's angle on first play; safe under concurrent requests */
 export async function getOrCreateDailyAngle(dateStr?: string) {
   const database = requireDb();

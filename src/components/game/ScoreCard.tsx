@@ -8,6 +8,7 @@ interface ScoreCardProps {
   saved?: boolean;
   valid?: boolean | null;
   isPractice?: boolean;
+  playAgainLabel?: string;
   onShare?: () => void;
   onPlayAgain?: () => void;
 }
@@ -20,6 +21,7 @@ export function ScoreCard({
   saved = false,
   valid = null,
   isPractice,
+  playAgainLabel,
   onShare,
   onPlayAgain,
 }: ScoreCardProps) {
@@ -73,11 +75,11 @@ export function ScoreCard({
       <div className="flex gap-2 w-full">
         {onPlayAgain && (
           <button onClick={onPlayAgain} className="btn-secondary flex-1 py-2.5">
-            {isPractice ? "Try again" : "Home"}
+            {playAgainLabel ?? (isPractice ? "Try again" : "Home")}
           </button>
         )}
         {onShare && saved && !isPractice && (
-          <button onClick={onShare} className="btn-primary flex-1 py-2.5">
+          <button onClick={onShare} className={`btn-primary py-2.5 ${onPlayAgain ? "flex-1" : "w-full"}`}>
             Share
           </button>
         )}

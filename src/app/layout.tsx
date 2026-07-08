@@ -4,6 +4,7 @@ import { AnalyticsProvider } from "@/lib/analytics";
 import { AppShell } from "@/components/AppShell";
 import { DesktopGate } from "@/components/DesktopGate";
 import { NavBar } from "@/components/NavBar";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -54,19 +55,22 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`${dmSans.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="h-full bg-[var(--bg)] text-[var(--fg)]">
-        <AnalyticsProvider>
-          <DesktopGate>
-            <div className="mobile-shell">
-              <AppShell>
-                <main className="mobile-main">{children}</main>
-              </AppShell>
-              <NavBar />
-            </div>
-          </DesktopGate>
-        </AnalyticsProvider>
+        <ThemeProvider>
+          <AnalyticsProvider>
+            <DesktopGate>
+              <div className="mobile-shell">
+                <AppShell>
+                  <main className="mobile-main">{children}</main>
+                </AppShell>
+                <NavBar />
+              </div>
+            </DesktopGate>
+          </AnalyticsProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

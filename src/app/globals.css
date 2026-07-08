@@ -14,6 +14,30 @@
   --accent-green: #6EE7B7;
   --danger: #f87171;
   --success: #6EE7B7;
+  --dial-ring: #2b2926;
+  --dial-tick: #4a4640;
+  --dial-needle: #9a948c;
+  --dial-needle-active: #6EE7B7;
+}
+
+[data-theme="light"] {
+  --bg: #f5f2ec;
+  --bg-elevated: #ffffff;
+  --bg-soft: #ebe6dd;
+  --fg: #1a1816;
+  --fg-muted: #5c5650;
+  --fg-subtle: #8a837a;
+  --border: #d9d3c8;
+  --border-strong: #c4bcb0;
+  --accent: #0284c7;
+  --accent-teal: #0284c7;
+  --accent-green: #059669;
+  --danger: #dc2626;
+  --success: #059669;
+  --dial-ring: #d9d3c8;
+  --dial-tick: #b8b0a4;
+  --dial-needle: #6f6a63;
+  --dial-needle-active: #059669;
 }
 
 @theme inline {

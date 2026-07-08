@@ -22,10 +22,10 @@ export function Dial({
   const radius = size * 0.38;
   const tolerance = GAME_CONFIG.tolerance;
 
-  const ring = "#2b2926";
-  const tick = "#4a4640";
-  const accent = inTolerance ? "#4FC3F7" : "#4FC3F766";
-  const needle = inTolerance ? "#6EE7B7" : "#9a948c";
+  const ring = "var(--dial-ring)";
+  const tick = "var(--dial-tick)";
+  const accent = inTolerance ? "var(--accent-teal)" : "color-mix(in srgb, var(--accent-teal) 40%, transparent)";
+  const needle = inTolerance ? "var(--dial-needle-active)" : "var(--dial-needle)";
 
   const toRad = (deg: number) => ((deg - 90) * Math.PI) / 180;
 
@@ -94,7 +94,7 @@ export function Dial({
           y1={cy + (radius - 16) * Math.sin(toRad(targetAngle))}
           x2={cx + (radius + 3) * Math.cos(toRad(targetAngle))}
           y2={cy + (radius + 3) * Math.sin(toRad(targetAngle))}
-          stroke="#4FC3F7"
+          stroke="var(--accent-teal)"
           strokeWidth={2}
         />
       )}

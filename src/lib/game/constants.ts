@@ -10,6 +10,8 @@ export const GAME_CONFIG = {
   holdDuration: 10,
   /** Angle reveal flash duration (ms) */
   revealDurationMs: 1750,
+  /** Hard mode: how long the dial stays visible after targeting starts (ms) */
+  hardModeIndicatorMs: 3000,
   /** Shake gate duration (seconds) */
   shakeDuration: 2.5,
   /** Minimum RMS acceleration for shake gate (m/s²) — linear accel preferred */
